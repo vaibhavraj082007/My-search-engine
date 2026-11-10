@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>8search</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+</head>
+<body>
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <a href="/" class="top-bar-logo">8search</a>
+    <div class="top-bar-right">
+      <span id="utcClock" class="utc-clock"></span>
+      <div id="userArea">
+        <a href="login.html" class="sign-in-link">Sign in</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Search Section -->
+  <main id="searchSection" class="search-section">
+    <h1 class="main-logo">8search</h1>
+    <form id="searchForm" class="search-form" autocomplete="off">
+      <div class="search-bar">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
+          <path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="searchInput" class="search-input" aria-label="Search" autofocus>
+        <button type="submit" class="search-submit" aria-label="Search">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
+            <path fill="#4285f4" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="search-buttons">
+        <button type="submit" class="search-btn">Search the web</button>
+        <button type="button" id="luckyBtn" class="search-btn">I'm Feeling Lucky</button>
+      </div>
+    </form>
+  </main>
+
+  <!-- Globe / Map Section -->
+  <section class="globe-section">
+    <div class="globe-controls">
+      <button id="btnGlobeFlat" class="globe-ctrl-btn active" title="Toggle Globe / Flat">🌐 Globe / Flat</button>
+      <button id="btnMapSat" class="globe-ctrl-btn" title="Toggle Map / Satellite">🗺️ Map / Satellite</button>
+      <button id="btnEarthquakes" class="globe-ctrl-btn" title="Toggle Earthquakes">🔴 Earthquakes</button>
+    </div>
+    <div id="map" class="map-container"></div>
+  </section>
+
+  <!-- Search Results -->
+  <section id="resultsSection" class="results-section hidden">
+    <div id="resultsContainer" class="results-container"></div>
+    <div id="pagination" class="pagination"></div>
+  </section>
+
+  <!-- Weather Panel -->
+  <aside id="weatherPanel" class="weather-panel hidden">
+    <button id="weatherClose" class="weather-close">&times;</button>
+    <div id="weatherContent" class="weather-content">
+      <div class="weather-loading">Loading weather…</div>
+    </div>
+  </aside>
+
+  <!-- Camera Panel -->
+  <aside id="cameraPanel" class="camera-panel hidden">
+    <button id="cameraClose" class="camera-close">&times;</button>
+    <div id="cameraContent" class="camera-content"></div>
+  </aside>
+
+  <!-- Login Prompt Banner -->
+  <div id="loginBanner" class="login-banner hidden">
+    <p>You've used your free searches. <a href="login.html" class="banner-link">Sign in</a> for unlimited searching!</p>
+    <button id="bannerDismiss" class="banner-dismiss">&times;</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="app.js"></script>
+  <script src="map.js"></script>
+</body>
+</html>
