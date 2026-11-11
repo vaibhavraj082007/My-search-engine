@@ -1,5 +1,5 @@
 /* =========================================================
-   8search – Map, Cameras, Weather, Earthquakes (map.js)
+   8search – Map, Weather, Earthquakes (map.js)
    ========================================================= */
 
 (function () {
@@ -80,108 +80,6 @@
   var earthquakesVisible = false;
   var earthquakeLayer = null;
 
-  // ---------- Camera cluster layer ----------
-  var cameraCluster = L.markerClusterGroup({
-    maxClusterRadius: 50,
-    disableClusteringAtZoom: 12,
-    spiderfyOnMaxZoom: true
-  });
-  map.addLayer(cameraCluster);
-
-  var cameraMarkersMap = {};
-  var cameraFetchTimeout = null;
-
-  // ---------- Fetch cameras on moveend ----------
-  function fetchCameras() {
-    var bounds = map.getBounds();
-    var params = new URLSearchParams({
-      north: bounds.getNorth(),
-      south: bounds.getSouth(),
-      east: bounds.getEast(),
-      west: bounds.getWest()
-    });
-
-    fetch('/api/cameras?' + params.toString(), { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (cameras) {
-        if (!Array.isArray(cameras)) return;
-
-        // Track existing ids
-        var newIds = {};
-        cameras.forEach(function (cam) {
-          newIds[cam.id] = true;
-          if (cameraMarkersMap[cam.id]) return; // already on map
-
-          var marker = L.marker([cam.lat, cam.lon], {
-            icon: L.divIcon({
-              className: 'camera-marker',
-              iconSize: [12, 12],
-              iconAnchor: [6, 6]
-            })
-          });
-
-          marker.on('click', function (e) {
-            L.DomEvent.stopPropagation(e);
-            openCameraPanel(cam);
-          });
-
-          cameraCluster.addLayer(marker);
-          cameraMarkersMap[cam.id] = marker;
-        });
-      })
-      .catch(function () { /* silently ignore */ });
-  }
-
-  map.on('moveend', function () {
-    clearTimeout(cameraFetchTimeout);
-    cameraFetchTimeout = setTimeout(fetchCameras, 300);
-  });
-
-  // Initial load
-  fetchCameras();
-
-  // ---------- Camera Panel ----------
-  var cameraPanel = document.getElementById('cameraPanel');
-  var cameraContent = document.getElementById('cameraContent');
-  var cameraCloseBtn = document.getElementById('cameraClose');
-
-  cameraCloseBtn.addEventListener('click', closeCameraPanel);
-
-  function openCameraPanel(cam) {
-    closeWeatherPanel();
-
-    var mediaHTML = '';
-    if (cam.type === 'video') {
-      mediaHTML = '<video src="' + escapeAttr(cam.url) + '" autoplay muted loop playsinline controls></video>';
-    } else {
-      mediaHTML = '<img src="' + escapeAttr(cam.url) + '" alt="' + escapeAttr(cam.name) + '" loading="lazy">';
-    }
-
-    var html =
-      mediaHTML +
-      '<div class="camera-name">' + escapeHTML(cam.name) + '</div>' +
-      '<div class="camera-meta">📍 ' + cam.lat.toFixed(4) + ', ' + cam.lon.toFixed(4) + '</div>' +
-      (cam.source ? '<div class="camera-meta">Source: ' + escapeHTML(cam.source) + '</div>' : '') +
-      (cam.credit ? '<div class="camera-meta">Credit: ' + escapeHTML(cam.credit) + '</div>' : '') +
-      '<div class="camera-weather"><div class="weather-loading">Loading weather…</div></div>';
-
-    cameraContent.innerHTML = html;
-    cameraPanel.classList.remove('hidden');
-    requestAnimationFrame(function () {
-      cameraPanel.classList.add('show');
-    });
-
-    // Fetch weather for camera location
-    fetchWeatherForPanel(cam.lat, cam.lon, cameraContent.querySelector('.camera-weather'));
-  }
-
-  function closeCameraPanel() {
-    cameraPanel.classList.remove('show');
-    setTimeout(function () {
-      cameraPanel.classList.add('hidden');
-    }, 350);
-  }
-
   // ---------- Weather Panel ----------
   var weatherPanel = document.getElementById('weatherPanel');
   var weatherContent = document.getElementById('weatherContent');
@@ -191,14 +89,13 @@
   weatherCloseBtn.addEventListener('click', closeWeatherPanel);
 
   function openWeatherPanel(lat, lon) {
-    closeCameraPanel();
     weatherContent.innerHTML = '<div class="weather-loading">Loading weather…</div>';
     weatherPanel.classList.remove('hidden');
     requestAnimationFrame(function () {
       weatherPanel.classList.add('show');
     });
 
-    fetchWeatherForPanel(lat, lon, weatherContent, true);
+    fetchWeatherForPanel(lat, lon, weatherContent);
   }
 
   function closeWeatherPanel() {
@@ -212,19 +109,19 @@
     }, 350);
   }
 
-  function fetchWeatherForPanel(lat, lon, container, isMainPanel) {
+  function fetchWeatherForPanel(lat, lon, container) {
     var url = '/api/weather?lat=' + lat.toFixed(4) + '&lon=' + lon.toFixed(4);
     fetch(url, { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        renderWeather(data, lat, lon, container, isMainPanel);
+        renderWeather(data, lat, lon, container);
       })
       .catch(function () {
         container.innerHTML = '<div class="weather-loading">Unable to load weather data.</div>';
       });
   }
 
-  function renderWeather(data, lat, lon, container, isMainPanel) {
+  function renderWeather(data, lat, lon, container) {
     var c = data.current;
     var w = decodeWeather(c.weather_code);
     var utcOffset = data.utc_offset_seconds || 0;
@@ -320,11 +217,7 @@
         clockEl.textContent = h + ':' + m + ':' + s;
       }
       updateLocalClock();
-      if (isMainPanel) {
-        localClockInterval = setInterval(updateLocalClock, 1000);
-      } else {
-        setInterval(updateLocalClock, 1000);
-      }
+      localClockInterval = setInterval(updateLocalClock, 1000);
     }
   }
 
@@ -434,11 +327,6 @@
     var d = document.createElement('div');
     d.appendChild(document.createTextNode(str || ''));
     return d.innerHTML;
-  }
-
-  function escapeAttr(str) {
-    return (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
 })();

@@ -7,9 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, camdb, searchdb
+from . import auth, searchdb
 from .search_api import router as search_router
-from .cameras_api import router as cameras_router
 from .weather_api import router as weather_router
 
 
@@ -18,7 +17,6 @@ async def lifespan(app: FastAPI):
     """Initialize all databases on startup."""
     auth.init_db()
     searchdb.init_db()
-    camdb.init_db()
     yield
 
 
@@ -36,7 +34,6 @@ app.add_middleware(
 # Include API routers
 app.include_router(auth.router)
 app.include_router(search_router)
-app.include_router(cameras_router)
 app.include_router(weather_router)
 
 # Mount frontend static files – served at "/" with html=True so
