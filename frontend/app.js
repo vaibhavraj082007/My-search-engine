@@ -111,7 +111,15 @@
 
     fetch('/api/search?q=' + encodeURIComponent(query) + '&page=' + page,
           { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            var msg = data && data.detail ? data.detail : 'Search is temporarily unavailable. Please try again.';
+            throw new Error(msg);
+          }
+          return data;
+        });
+      })
       .then(function (data) {
         if (data.redirect) { window.location.href = data.redirect; return; }
 
@@ -132,10 +140,12 @@
 
         renderResults(data);
       })
-      .catch(function () {
+      .catch(function (err) {
         resultsContainer.innerHTML =
           '<div class="no-results"><div class="no-results-icon">⚠️</div>' +
-          '<h3>Something went wrong</h3><p>Check your connection and try again.</p></div>';
+          '<h3>Something went wrong</h3><p>' +
+          esc(err && err.message ? err.message : 'Check your connection and try again.') +
+          '</p></div>';
       });
   }
 
@@ -143,8 +153,11 @@
   function renderResults(data) {
     var results = data.results || [];
     var news    = data.news    || [];
+    var answer  = data.answer  || null;
+    var wiki    = data.wikipedia || null;
+    var videos  = data.videos  || [];
 
-    if (!results.length && !news.length) {
+    if (!results.length && !news.length && !answer && !wiki && !videos.length) {
       resultsContainer.innerHTML =
         '<div class="no-results"><div class="no-results-icon">🔍</div>' +
         '<h3>No results found</h3><p>Try different keywords for "<strong>' +
@@ -159,47 +172,131 @@
     html += '<div class="results-info">About <strong>' + (data.total || results.length) +
             '</strong> results for "<strong>' + esc(currentQuery) + '</strong>"</div>';
 
-    // ── Web results (first 3 above news) ──
-    var above = results.slice(0, 3);
-    var below = results.slice(3);
+    // ── Quick answer / meaning ──
+    if (answer) html += buildAnswerCard(answer);
 
-    above.forEach(function (r) { html += buildResultCard(r); });
+    // ── Wikipedia article ──
+    if (wiki) html += buildWikiCard(wiki);
 
-    // ── In the News ──
-    if (news.length) {
-      html += '<div class="news-section">';
-      html += '<div class="news-heading"><span class="news-icon">📰</span> In the News</div>';
-      html += '<div class="news-grid">';
-      news.forEach(function (n) {
-        var domain = domainOf(n.url);
-        var favicon = 'https://www.google.com/s2/favicons?sz=16&domain=' + encodeURIComponent(domain);
-        var timeAgo = n.date ? relativeTime(n.date) : '';
-        html +=
-          '<a class="news-card" href="' + escAttr(n.url) + '" target="_blank" rel="noopener">' +
-            (n.image
-              ? '<div class="news-card-img"><img src="' + escAttr(n.image) + '" alt="" loading="lazy" onerror="this.parentElement.style.display=\'none\'"></div>'
-              : '') +
-            '<div class="news-card-body">' +
-              '<div class="news-card-source">' +
-                '<img src="' + escAttr(favicon) + '" width="14" height="14" alt="">' +
-                '<span>' + esc(n.source || domain) + '</span>' +
-              '</div>' +
-              '<div class="news-card-title">' + esc(n.title) + '</div>' +
-              (timeAgo ? '<div class="news-card-time">' + timeAgo + '</div>' : '') +
-            '</div>' +
-          '</a>';
-      });
-      html += '</div></div>'; // news-grid + news-section
-    }
+    // ── YouTube videos ──
+    if (videos.length) html += buildVideosSection(videos);
 
-    // ── Remaining web results ──
-    below.forEach(function (r) { html += buildResultCard(r); });
+    // ── Web results ──
+    results.forEach(function (r) { html += buildResultCard(r); });
+
+    // ── In the news ──
+    if (news.length) html += buildNewsSection(news);
 
     resultsContainer.innerHTML = html;
+    wireAnswerToggle();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Pagination (simple prev/next only – DDG doesn't expose total count)
     renderPagination(currentPage);
+  }
+
+  function buildAnswerCard(a) {
+    var kicker = a.kind === 'definition' ? 'Meaning' : 'Quick answer';
+    var text   = a.text || '';
+    var expandable = text.length > 240;
+    var source = a.url
+      ? '<a class="answer-source" href="' + escAttr(a.url) + '" target="_blank" rel="noopener">Source: ' +
+          esc(a.source || 'the web') + '</a>'
+      : '<span class="answer-source">' + esc(a.source || '') + '</span>';
+
+    return (
+      '<section class="answer-card">' +
+        '<div class="answer-kicker">' + kicker + '</div>' +
+        '<div class="answer-title">' + esc(a.title || currentQuery) + '</div>' +
+        (a.part_of_speech ? '<div class="answer-pos">' + esc(a.part_of_speech) + '</div>' : '') +
+        '<div class="answer-text" id="answerText">' + esc(text) + '</div>' +
+        '<div class="answer-footer">' +
+          source +
+          (expandable
+            ? '<button type="button" class="answer-toggle" id="answerToggle" aria-expanded="false">Show more</button>'
+            : '') +
+        '</div>' +
+      '</section>'
+    );
+  }
+
+  function wireAnswerToggle() {
+    var button = document.getElementById('answerToggle');
+    var text   = document.getElementById('answerText');
+    if (!button || !text) return;
+    button.addEventListener('click', function () {
+      var expanded = text.classList.toggle('expanded');
+      button.textContent = expanded ? 'Show less' : 'Show more';
+      button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    });
+  }
+
+  function buildWikiCard(wiki) {
+    var url = wiki.url || '';
+    return (
+      '<a class="wiki-card" href="' + escAttr(url) + '" target="_blank" rel="noopener">' +
+        '<div class="wiki-top"><span class="wiki-mark">W</span><span>Wikipedia</span></div>' +
+        '<div class="wiki-title">' + esc(wiki.title || '') + '</div>' +
+        '<div class="wiki-extract">' + esc(wiki.extract || wiki.description || '') + '</div>' +
+        '<div class="wiki-url">' + esc(makeBreadcrumb(url)) + '</div>' +
+      '</a>'
+    );
+  }
+
+  function buildVideosSection(videos) {
+    var html =
+      '<section class="videos-section">' +
+        '<div class="videos-heading">Videos</div>' +
+        '<div class="video-list">';
+
+    videos.forEach(function (v) {
+      var meta = [v.channel, v.published].filter(Boolean).join(' · ');
+      html +=
+        '<a class="video-row" href="' + escAttr(v.url) + '" target="_blank" rel="noopener">' +
+          '<div class="video-thumb' + (v.thumbnail ? '' : ' is-empty') + '">' +
+            (v.thumbnail
+              ? '<img src="' + escAttr(v.thumbnail) + '" alt="" loading="lazy" ' +
+                'onerror="this.parentElement.classList.add(\'is-empty\'); this.remove()">'
+              : '') +
+            (v.duration ? '<span class="video-duration">' + esc(v.duration) + '</span>' : '') +
+          '</div>' +
+          '<div class="video-info">' +
+            '<div class="video-title">' + esc(v.title || '') + '</div>' +
+            (meta ? '<div class="video-meta">' + esc(meta) + '</div>' : '') +
+          '</div>' +
+        '</a>';
+    });
+
+    return html + '</div></section>';
+  }
+
+  function buildNewsSection(news) {
+    var html =
+      '<section class="news-section">' +
+        '<div class="news-heading">In the news</div>' +
+        '<div class="news-grid">';
+
+    news.forEach(function (n) {
+      var domain = domainOf(n.url);
+      var favicon = 'https://www.google.com/s2/favicons?sz=16&domain=' + encodeURIComponent(domain);
+      var timeAgo = n.date ? relativeTime(n.date) : '';
+      html +=
+        '<a class="news-card" href="' + escAttr(n.url) + '" target="_blank" rel="noopener">' +
+          (n.image
+            ? '<div class="news-card-img"><img src="' + escAttr(n.image) + '" alt="" loading="lazy" onerror="this.parentElement.style.display=\'none\'"></div>'
+            : '') +
+          '<div class="news-card-body">' +
+            '<div class="news-card-source">' +
+              '<img src="' + escAttr(favicon) + '" width="14" height="14" alt="">' +
+              '<span>' + esc(n.source || domain) + '</span>' +
+            '</div>' +
+            '<div class="news-card-title">' + esc(n.title) + '</div>' +
+            (timeAgo ? '<div class="news-card-time">' + timeAgo + '</div>' : '') +
+          '</div>' +
+        '</a>';
+    });
+
+    return html + '</div></section>';
   }
 
   function buildResultCard(r) {
@@ -254,7 +351,7 @@
       var u = new URL(url);
       var parts = [u.hostname.replace(/^www\./, '')];
       var segs  = u.pathname.split('/').filter(Boolean);
-      segs.forEach(function (s) { parts.push(decodeURIComponent(s).replace(/-/g, ' ')); });
+      segs.forEach(function (s) { parts.push(decodeURIComponent(s).replace(/_/g, ' ')); });
       return parts.join(' › ');
     } catch (e) { return url; }
   }

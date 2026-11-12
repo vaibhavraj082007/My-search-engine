@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.9+-blue?logo=python&logoColor=white" alt="Python 3.9+" />
+  <img src="https://img.shields.io/badge/python-3.11+-blue?logo=python&logoColor=white" alt="Python 3.11+" />
   <img src="https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white" alt="FastAPI" />
   <img src="https://img.shields.io/badge/Leaflet-globe-199900?logo=leaflet&logoColor=white" alt="Leaflet" />
   <img src="https://img.shields.io/badge/licence-MIT-green" alt="MIT Licence" />
@@ -155,30 +155,15 @@ source venv/bin/activate        # Do this every time you open a new terminal
 pip install -r requirements.txt
 ```
 
-### 3. Load Camera Data
+### 3. Start the Server
+
+Run this from the **project root** (not from inside `backend/`):
 
 ```bash
-cd backend
-python3 import_all.py
+uvicorn backend.main:app --reload
 ```
 
-Expected output:
-```
-otcm         saved   7024   skipped 5
-finland      saved    ~470  skipped 0
-newzealand   saved    ~320  skipped 0
-hongkong     saved   ~1000  skipped 0
-
-Total cameras in database: ~8800
-```
-
-### 4. Start the Server
-
-```bash
-uvicorn main:app --reload
-```
-
-### 5. Open in Your Browser
+### 4. Open in Your Browser
 
 👉 **http://localhost:8000**
 
@@ -188,23 +173,36 @@ That's it. Search, spin the globe, click anywhere for live weather.
 
 ## 🔍 How Search Works
 
-8search runs its **own search engine** — you control what gets indexed.
+8search is an **answer-first search page**. For each query it builds:
 
-### Indexing Pages
+1. **Quick answer / meaning** — a short overview with a **Show more** expander.
+   Single words use a Wiktionary definition; topics use Wikipedia.
+2. **Wikipedia card** — the matching article, with a direct link.
+3. **Videos** — YouTube results with thumbnails, duration, and channel.
+4. **Web links** — DuckDuckGo results, supplemented by Bing's RSS endpoint
+   when a provider is rate-limited.
+5. **In the news** — recent articles and images when available.
+
+Every enrichment is fetched independently, so a missing Wikipedia article or
+video section never breaks the rest of the page.
+
+### Indexing Pages (optional local index)
+
+8search also ships with its own crawler and FTS5 index. You can add pages:
 
 ```bash
-# Crawl a website (follows links, max 50 pages, respects robots.txt)
-python3 crawler.py https://en.wikipedia.org/wiki/Mumbai
+python crawler.py https://en.wikipedia.org/wiki/Mumbai
 ```
 
-After crawling, search for any word from those pages in the search bar.
+After crawling, matching pages are merged into web results.
 
 ### Search Behaviour
 
 | Input | What happens |
 | --- | --- |
 | `example.com` | Navigates directly (like Chrome) |
-| `weather in tokyo` | Searches your index for matching pages |
+| `dark web` | Answer + Wikipedia + videos + web links |
+| `serendipity` | Dictionary meaning + Wikipedia + videos + links |
 | Any query after 4 searches (guest) | Prompts to log in |
 | Any query after login | Unlimited results |
 
@@ -212,6 +210,9 @@ After crawling, search for any word from those pages in the search bar.
 
 - **Guests:** 4 searches per session. After that, a non-intrusive banner asks them to sign in.
 - **Logged-in users:** Unlimited searches. No caps. No throttle. No ads. Ever.
+- **High-traffic protection:** per-IP API limiting, shared caching, and bounded
+  upstream concurrency keep the site responsive under load. See
+  [SCALING.md](SCALING.md) for the production path to 500k users.
 
 ---
 
@@ -297,10 +298,28 @@ Visits every camera URL and marks dead ones so they disappear from the globe. Ru
 
 | Feature | Details |
 | --- | --- |
-| Sign up | Email + password (8+ characters) |
-| Password storage | Salted hash only (never plain text) |
-| Data location | Local SQLite in `backend/data/` |
-| Session | Cookie-based |
+| Sign up / sign in | Email + password (8+ characters) |
+| Password storage | bcrypt hash only (never plain text) |
+| Password reset | Single-use emailed link, valid for 30 minutes |
+| Login alerts | Email sent after every successful sign-in |
+| Data location | Local SQLite in `data/` |
+| Session | HttpOnly cookie (30 days) |
+
+### ✉️ Email setup (password reset & login alerts)
+
+Copy `backend/.env.example` to `backend/.env` and fill in your SMTP details:
+
+| Variable | Example | Notes |
+| --- | --- | --- |
+| `SMTP_HOST` | `smtp.gmail.com` | Your provider's SMTP server |
+| `SMTP_PORT` | `587` | `465` with `SMTP_SECURITY=ssl` |
+| `SMTP_USER` | `you@gmail.com` | SMTP login |
+| `SMTP_PASSWORD` | app password | For Gmail, create an App Password |
+| `SMTP_FROM` | `"8search <you@gmail.com>"` | Sender shown in the email |
+| `SMTP_SECURITY` | `starttls` | `starttls`, `ssl`, or `none` |
+| `APP_BASE_URL` | `http://localhost:8000` | Used to build reset links |
+
+> **Local development:** if SMTP is not configured, every email — including the password-reset link — is printed to the server console. Password resets still work end-to-end.
 
 Accounts unlock **unlimited searches** and will power future features like search history, bookmarks, and personalized globe settings.
 
@@ -314,14 +333,18 @@ Key endpoints:
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
-| `/api/search?q=...` | GET | Full-text search |
+| `/api/search?q=...` | GET | Answer-first web search (cached, rate-limited) |
 | `/api/cameras?bounds=...` | GET | Cameras within map bounds |
 | `/api/weather?lat=...&lon=...` | GET | Live weather for coordinates |
 | `/api/stats` | GET | Camera count per source |
 | `/api/signup` | POST | Create account |
-| `/api/login` | POST | Log in |
+| `/api/login` | POST | Log in (sends a sign-in alert email) |
 | `/api/logout` | POST | Log out |
 | `/api/me` | GET | Current user info |
+| `/api/forgot-password` | POST | Email a password-reset link |
+| `/api/reset-password` | POST | Set a new password with a reset token |
+| `/health` | GET | Liveness probe for load balancers |
+| `/ready` | GET | Readiness probe (reports cache backend) |
 
 ---
 
@@ -345,11 +368,17 @@ Key endpoints:
 > [!IMPORTANT]
 > The current setup is designed for **local development and learning**. Before deploying to real users:
 
+- **Database:** SQLite is fine for one host. Move users/sessions/reset tokens to Postgres before running multiple app replicas.
+- **Search provider:** DuckDuckGo/Bing HTML and RSS endpoints are demo-grade. Use a paid search API with an SLA for real traffic.
+- **YouTube:** scraping results pages will be blocked at scale. Use the YouTube Data API.
 - **Map tiles:** OpenStreetMap and Esri tiles have usage limits. Switch to a commercial tile provider for heavy traffic.
 - **Weather API:** Open-Meteo is free for **non-commercial use only**. Review their [terms](https://open-meteo.com/en/terms).
 - **Camera licences:** Keep each source's credit visible. The panel already shows per-camera credits.
 - **Authentication:** Add HTTPS, rate-limit failed logins, and consider OAuth for production.
 - **Crawler:** Maintain the 1-second delay and always respect `robots.txt`.
+
+See **[SCALING.md](SCALING.md)** for the full production architecture, sizing
+math, environment variables, and load-test instructions.
 
 ---
 

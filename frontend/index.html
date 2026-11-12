@@ -3,14 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6efe3">
   <title>8search</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261112-3">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
   <!-- Top Bar -->
   <header class="top-bar">
-    <a href="/" class="top-bar-logo">8search</a>
+    <a href="/" class="top-bar-logo"><span class="logo-8">8</span>search</a>
     <div class="top-bar-right">
       <span id="utcClock" class="utc-clock"></span>
       <div id="userArea">
@@ -21,16 +22,16 @@
 
   <!-- Main Search Section -->
   <main id="searchSection" class="search-section">
-    <h1 class="main-logo">8search</h1>
+    <h1 class="main-logo"><span class="logo-8">8</span>search</h1>
     <form id="searchForm" class="search-form" autocomplete="off">
       <div class="search-bar">
         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
-          <path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
         </svg>
         <input type="text" id="searchInput" class="search-input" placeholder="Search the web or type a URL" aria-label="Search" autofocus>
         <button type="submit" class="search-submit" aria-label="Search">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20">
-            <path fill="#4285f4" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
           </svg>
         </button>
       </div>
@@ -44,9 +45,9 @@
   <!-- Globe / Map Section -->
   <section class="globe-section">
     <div class="globe-controls">
-      <button id="btnGlobeFlat" class="globe-ctrl-btn active" title="Toggle Globe / Flat">🌐 Globe / Flat</button>
-      <button id="btnMapSat" class="globe-ctrl-btn" title="Toggle Map / Satellite">🗺️ Map / Satellite</button>
-      <button id="btnEarthquakes" class="globe-ctrl-btn" title="Toggle Earthquakes">🔴 Earthquakes</button>
+      <button id="btnGlobeFlat" class="globe-ctrl-btn" title="Toggle Globe / Flat">Globe / Flat</button>
+      <button id="btnMapSat" class="globe-ctrl-btn" title="Toggle Map / Satellite">Map / Satellite</button>
+      <button id="btnEarthquakes" class="globe-ctrl-btn" title="Toggle Earthquakes">Earthquakes</button>
     </div>
     <div id="map" class="map-container"></div>
   </section>
@@ -56,6 +57,11 @@
     <div id="resultsContainer" class="results-container"></div>
     <div id="pagination" class="pagination"></div>
   </section>
+
+  <footer class="site-footer">
+    <p><strong>8search</strong> — search the web, explore the world.</p>
+    <p>Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Maps by Esri &amp; OpenStreetMap</p>
+  </footer>
 
   <!-- Weather Panel -->
   <aside id="weatherPanel" class="weather-panel hidden">
@@ -72,7 +78,7 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js"></script>
-  <script src="map.js"></script>
+  <script src="app.js?v=20261112-3"></script>
+  <script src="map.js?v=20261112-3"></script>
 </body>
 </html>

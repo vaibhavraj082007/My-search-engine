@@ -91,22 +91,18 @@
   function openWeatherPanel(lat, lon) {
     weatherContent.innerHTML = '<div class="weather-loading">Loading weather…</div>';
     weatherPanel.classList.remove('hidden');
-    requestAnimationFrame(function () {
-      weatherPanel.classList.add('show');
-    });
+    weatherPanel.classList.add('show');
 
     fetchWeatherForPanel(lat, lon, weatherContent);
   }
 
   function closeWeatherPanel() {
     weatherPanel.classList.remove('show');
+    weatherPanel.classList.add('hidden');
     if (localClockInterval) {
       clearInterval(localClockInterval);
       localClockInterval = null;
     }
-    setTimeout(function () {
-      weatherPanel.classList.add('hidden');
-    }, 350);
   }
 
   function fetchWeatherForPanel(lat, lon, container) {
@@ -136,7 +132,7 @@
 
     var html =
       '<div class="weather-header">' +
-        '<div class="weather-location">📍 ' + lat.toFixed(2) + '°, ' + lon.toFixed(2) + '°</div>' +
+        '<div class="weather-location">' + lat.toFixed(2) + '°, ' + lon.toFixed(2) + '°</div>' +
         '<div class="weather-temp-row">' +
           '<div class="weather-temp">' + Math.round(c.temperature) + '°</div>' +
           '<div>' +
@@ -146,7 +142,7 @@
         '</div>' +
         '<div class="weather-local-time">' +
           '<div>' +
-            '<div class="clock-label">🕐 Local Time</div>' +
+            '<div class="clock-label">Local time</div>' +
             '<div class="clock-value" id="' + clockId + '">--:--:--</div>' +
           '</div>' +
         '</div>' +
@@ -156,7 +152,7 @@
     html +=
       '<div class="weather-details">' +
         '<div class="weather-detail-card">' +
-          '<div class="label">💨 Wind</div>' +
+          '<div class="label">Wind</div>' +
           '<div class="value">' + c.wind_speed + '<span class="unit"> km/h</span></div>' +
           '<div style="margin-top:4px;">' +
             '<span class="wind-arrow" style="transform:rotate(' + (c.wind_direction || 0) + 'deg)">↑</span> ' +
@@ -164,22 +160,22 @@
           '</div>' +
         '</div>' +
         '<div class="weather-detail-card">' +
-          '<div class="label">🌧️ Rain</div>' +
+          '<div class="label">Rain</div>' +
           '<div class="value">' + (c.rain || 0) + '<span class="unit"> mm</span></div>' +
         '</div>' +
         '<div class="weather-detail-card">' +
-          '<div class="label">☁️ Cloud Cover</div>' +
+          '<div class="label">Cloud cover</div>' +
           '<div class="value">' + (c.cloud_cover || 0) + '<span class="unit">%</span></div>' +
         '</div>' +
         '<div class="weather-detail-card">' +
-          '<div class="label">' + (c.is_day ? '☀️ Daytime' : '🌙 Nighttime') + '</div>' +
+          '<div class="label">' + (c.is_day ? 'Daytime' : 'Nighttime') + '</div>' +
           '<div class="value">' + (c.is_day ? 'Day' : 'Night') + '</div>' +
         '</div>' +
       '</div>';
 
     // Forecast
     if (data.daily && data.daily.length > 0) {
-      html += '<div class="weather-forecast-title">📅 Forecast</div>';
+      html += '<div class="weather-forecast-title">16-day forecast</div>';
       html += '<div class="weather-forecast">';
 
       var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];

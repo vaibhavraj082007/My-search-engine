@@ -4,25 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in – 8search</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261112-3">
 </head>
 <body class="auth-page">
   <div class="auth-card">
-    <div class="auth-logo">8search</div>
+    <div class="auth-logo"><span class="logo-8">8</span>search</div>
     <div class="auth-subtitle">Sign in to your account</div>
 
+    <div id="successMsg" class="auth-success"></div>
     <div id="errorMsg" class="auth-error"></div>
 
-    <form id="loginForm">
+    <form id="loginForm" class="auth-form">
       <div class="auth-field">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+        <input type="email" id="email" name="email" required maxlength="254" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="auth-field">
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" required placeholder="Enter your password" autocomplete="current-password">
+        <input type="password" id="password" name="password" required maxlength="72" placeholder="Enter your password" autocomplete="current-password">
       </div>
-      <button type="submit" class="auth-submit">Sign in</button>
+
+      <div class="auth-forgot">
+        <a href="forgot-password.html">Forgot password?</a>
+      </div>
+
+      <button type="submit" class="auth-submit" id="submitBtn">Sign in</button>
     </form>
 
     <div class="auth-footer">
@@ -36,10 +42,17 @@
 
       var form = document.getElementById('loginForm');
       var errorMsg = document.getElementById('errorMsg');
+      var successMsg = document.getElementById('successMsg');
+      var submitBtn = document.getElementById('submitBtn');
+
+      // Show a confirmation when arriving from the reset-password page.
+      if (new URLSearchParams(window.location.search).get('reset') === '1') {
+        showSuccess('Password updated. Sign in with your new password.');
+      }
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        errorMsg.classList.remove('show');
+        hideMessages();
 
         var email = document.getElementById('email').value.trim();
         var password = document.getElementById('password').value;
@@ -49,6 +62,7 @@
           return;
         }
 
+        setLoading(true);
         fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -63,13 +77,37 @@
           window.location.href = '/';
         })
         .catch(function (err) {
-          showError(err.message || err.error || 'Invalid email or password.');
+          setLoading(false);
+          showError(messageOf(err, 'Invalid email or password.'));
         });
       });
 
+      function setLoading(loading) {
+        submitBtn.disabled = loading;
+        submitBtn.textContent = loading ? 'Signing in…' : 'Sign in';
+      }
+
+      function hideMessages() {
+        errorMsg.classList.remove('visible');
+        successMsg.classList.remove('visible');
+      }
+
       function showError(msg) {
+        successMsg.classList.remove('visible');
         errorMsg.textContent = msg;
-        errorMsg.classList.add('show');
+        errorMsg.classList.add('visible');
+      }
+
+      function showSuccess(msg) {
+        errorMsg.classList.remove('visible');
+        successMsg.textContent = msg;
+        successMsg.classList.add('visible');
+      }
+
+      function messageOf(err, fallback) {
+        var detail = err && (err.detail || err.message || err.error);
+        if (Array.isArray(detail)) detail = detail[0] && (detail[0].msg || detail[0].detail);
+        return detail || fallback;
       }
     })();
   </script>

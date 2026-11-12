@@ -4,29 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Create account – 8search</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261112-3">
 </head>
 <body class="auth-page">
   <div class="auth-card">
-    <div class="auth-logo">8search</div>
+    <div class="auth-logo"><span class="logo-8">8</span>search</div>
     <div class="auth-subtitle">Create your account</div>
 
     <div id="errorMsg" class="auth-error"></div>
 
-    <form id="signupForm">
+    <form id="signupForm" class="auth-form">
       <div class="auth-field">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+        <input type="email" id="email" name="email" required maxlength="254" placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="auth-field">
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" required placeholder="Min 8 characters" minlength="8" autocomplete="new-password">
+        <input type="password" id="password" name="password" required minlength="8" maxlength="72" placeholder="Min 8 characters" autocomplete="new-password">
       </div>
       <div class="auth-field">
         <label for="confirmPassword">Confirm Password</label>
-        <input type="password" id="confirmPassword" name="confirmPassword" required placeholder="Re-enter your password" autocomplete="new-password">
+        <input type="password" id="confirmPassword" name="confirmPassword" required minlength="8" maxlength="72" placeholder="Re-enter your password" autocomplete="new-password">
       </div>
-      <button type="submit" class="auth-submit">Create account</button>
+      <button type="submit" class="auth-submit" id="submitBtn">Create account</button>
     </form>
 
     <div class="auth-footer">
@@ -40,10 +40,11 @@
 
       var form = document.getElementById('signupForm');
       var errorMsg = document.getElementById('errorMsg');
+      var submitBtn = document.getElementById('submitBtn');
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        errorMsg.classList.remove('show');
+        errorMsg.classList.remove('visible');
 
         var email = document.getElementById('email').value.trim();
         var password = document.getElementById('password').value;
@@ -64,6 +65,7 @@
           return;
         }
 
+        setLoading(true);
         fetch('/api/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -78,13 +80,25 @@
           window.location.href = 'login.html';
         })
         .catch(function (err) {
-          showError(err.message || err.error || 'Failed to create account. Please try again.');
+          setLoading(false);
+          showError(messageOf(err, 'Failed to create account. Please try again.'));
         });
       });
 
+      function setLoading(loading) {
+        submitBtn.disabled = loading;
+        submitBtn.textContent = loading ? 'Creating account…' : 'Create account';
+      }
+
       function showError(msg) {
         errorMsg.textContent = msg;
-        errorMsg.classList.add('show');
+        errorMsg.classList.add('visible');
+      }
+
+      function messageOf(err, fallback) {
+        var detail = err && (err.detail || err.message || err.error);
+        if (Array.isArray(detail)) detail = detail[0] && (detail[0].msg || detail[0].detail);
+        return detail || fallback;
       }
     })();
   </script>
