@@ -22,6 +22,9 @@
   var currentUser  = null;
   var currentQuery = '';
   var currentPage  = 1;
+  var searchSeq    = 0;
+  var PAGE_WINDOW  = 5;
+  var MAX_PAGE     = 10;
 
   // ---------- UTC Clock ----------
   function updateUTCClock() {
@@ -61,7 +64,7 @@
   }
 
   // ---------- Home ----------
-  function goHome() {
+  function goHome(pushHistory) {
     searchSection.classList.remove('compact');
     resultsSection.classList.add('hidden');
     resultsContainer.innerHTML = '';
@@ -70,6 +73,11 @@
     searchInput.value = '';
     currentQuery = '';
     currentPage  = 1;
+    searchSeq    = 0;
+
+    if (pushHistory !== false) {
+      try { window.history.pushState({}, '', window.location.pathname); } catch (e) {}
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -86,6 +94,32 @@
     doSearch(searchInput.value.trim(), true);
   });
 
+  // ---------- URL / history ----------
+  function readRoute() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var q = (params.get('q') || '').trim();
+      var page = parseInt(params.get('page') || '1', 10);
+      if (!isFinite(page) || page < 1) page = 1;
+      if (page > MAX_PAGE) page = MAX_PAGE;
+      return { q: q, page: page };
+    } catch (e) {
+      return { q: '', page: 1 };
+    }
+  }
+
+  function updateUrl(query, page, mode) {
+    try {
+      var params = new URLSearchParams();
+      params.set('q', query);
+      if (page > 1) params.set('page', String(page));
+      var url = window.location.pathname + '?' + params.toString();
+      var state = { q: query, page: page };
+      if (mode === 'push') window.history.pushState(state, '', url);
+      else window.history.replaceState(state, '', url);
+    } catch (e) {}
+  }
+
   function doSearch(q, lucky) {
     if (!q) return;
     // URL-like → navigate
@@ -93,13 +127,15 @@
       window.location.href = /^https?:\/\//i.test(q) ? q : 'https://' + q;
       return;
     }
-    currentQuery = q;
-    currentPage  = 1;
-    performSearch(q, 1, lucky);
+    performSearch(q, 1, lucky, 'push');
   }
 
   // ---------- Search ----------
-  function performSearch(query, page, lucky) {
+  function performSearch(query, page, lucky, historyMode) {
+    currentQuery = query;
+    currentPage  = page;
+    var seq = ++searchSeq;
+
     // Switch to results layout
     searchSection.classList.add('compact');
     if (globeSection) globeSection.style.display = 'none';
@@ -108,6 +144,7 @@
     resultsContainer.innerHTML =
       '<div class="search-loading"><div class="spinner"></div><p>Searching…</p></div>';
     pagination.innerHTML = '';
+    pagination.setAttribute('aria-busy', 'true');
 
     fetch('/api/search?q=' + encodeURIComponent(query) + '&page=' + page,
           { credentials: 'same-origin' })
@@ -121,6 +158,9 @@
         });
       })
       .then(function (data) {
+        // A newer search/page was requested while this one was in flight.
+        if (seq !== searchSeq) return;
+
         if (data.redirect) { window.location.href = data.redirect; return; }
 
         if (data.limit_reached) {
@@ -138,14 +178,21 @@
           window.location.href = data.results[0].url; return;
         }
 
+        currentPage = data.page || page;
+        if (historyMode) updateUrl(query, currentPage, historyMode);
         renderResults(data);
       })
       .catch(function (err) {
+        if (seq !== searchSeq) return;
+        pagination.innerHTML = '';
         resultsContainer.innerHTML =
           '<div class="no-results"><div class="no-results-icon">⚠️</div>' +
           '<h3>Something went wrong</h3><p>' +
           esc(err && err.message ? err.message : 'Check your connection and try again.') +
           '</p></div>';
+      })
+      .finally(function () {
+        if (seq === searchSeq) pagination.setAttribute('aria-busy', 'false');
       });
   }
 
@@ -157,11 +204,17 @@
     var wiki    = data.wikipedia || null;
     var videos  = data.videos  || [];
 
+    var page = data.page || currentPage || 1;
+
     if (!results.length && !news.length && !answer && !wiki && !videos.length) {
       resultsContainer.innerHTML =
-        '<div class="no-results"><div class="no-results-icon">🔍</div>' +
-        '<h3>No results found</h3><p>Try different keywords for "<strong>' +
-        esc(currentQuery) + '</strong>".</p></div>';
+        page > 1
+          ? '<div class="no-results"><div class="no-results-icon">🔍</div>' +
+              '<h3>No more results</h3><p>You have reached the end of the results for "<strong>' +
+              esc(currentQuery) + '</strong>".</p></div>'
+          : '<div class="no-results"><div class="no-results-icon">🔍</div>' +
+              '<h3>No results found</h3><p>Try different keywords for "<strong>' +
+              esc(currentQuery) + '</strong>".</p></div>';
       pagination.innerHTML = '';
       return;
     }
@@ -169,8 +222,12 @@
     var html = '';
 
     // ── Results count bar ──
-    html += '<div class="results-info">About <strong>' + (data.total || results.length) +
-            '</strong> results for "<strong>' + esc(currentQuery) + '</strong>"</div>';
+    var totalLabel = (data.total || results.length) + (data.has_more ? '+' : '');
+    html += page > 1
+      ? '<div class="results-info">Page <strong>' + page + '</strong> — results for "<strong>' +
+          esc(currentQuery) + '</strong>"</div>'
+      : '<div class="results-info">About <strong>' + totalLabel +
+          '</strong> results for "<strong>' + esc(currentQuery) + '</strong>"</div>';
 
     // ── Quick answer / meaning ──
     if (answer) html += buildAnswerCard(answer);
@@ -191,8 +248,7 @@
     wireAnswerToggle();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Pagination (simple prev/next only – DDG doesn't expose total count)
-    renderPagination(currentPage);
+    renderPagination(page, data);
   }
 
   function buildAnswerCard(a) {
@@ -310,6 +366,7 @@
           '<img class="result-favicon" src="' + escAttr(favicon) + '" width="16" height="16" alt="" ' +
                'onerror="this.style.display=\'none\'">' +
           '<span class="result-breadcrumb">' + esc(breadcrumb) + '</span>' +
+          (r.source ? '<span class="result-source">' + esc(r.source) + '</span>' : '') +
         '</div>' +
         '<a class="result-title" href="' + escAttr(r.url) + '" target="_blank" rel="noopener">' +
           esc(r.title || 'Untitled') +
@@ -320,20 +377,62 @@
   }
 
   // ---------- Pagination ----------
-  function renderPagination(current) {
+  function pageButton(page, label, extraClass) {
+    var active = extraClass === 'active';
+    return '<button type="button" class="page-btn' +
+      (extraClass ? ' ' + extraClass : '') +
+      '" data-page="' + page + '"' +
+      (active ? ' aria-current="page"' : '') + '>' + label + '</button>';
+  }
+
+  function renderPagination(current, data) {
+    var maxPage = (data && data.max_page) || MAX_PAGE;
+    var hasMore = !!(data && data.has_more);
+
+    if (!hasMore && current === 1) {
+      pagination.innerHTML = '';
+      return;
+    }
+
+    var start, end;
+    if (hasMore) {
+      // Slide a five-page window around the current page. While browsing the
+      // first pages this gives exactly "1 2 3 4 5  Next".
+      start = Math.max(1, current - 2);
+      end = Math.min(maxPage, start + PAGE_WINDOW - 1);
+      if (end - start + 1 < PAGE_WINDOW) start = Math.max(1, end - PAGE_WINDOW + 1);
+    } else {
+      end = current;
+      start = Math.max(1, current - PAGE_WINDOW + 1);
+    }
+
     var html = '';
     if (current > 1)
-      html += '<button class="page-btn" data-page="' + (current - 1) + '">&laquo; Prev</button>';
-    html += '<button class="page-btn active">' + current + '</button>';
-    html += '<button class="page-btn" data-page="' + (current + 1) + '">Next &raquo;</button>';
+      html += pageButton(current - 1, '&laquo; Prev', 'page-prev');
+
+    if (start > 1) {
+      html += pageButton(1, '1');
+      if (start > 2) html += '<span class="page-ellipsis" aria-hidden="true">…</span>';
+    }
+
+    for (var i = start; i <= end; i++) {
+      html += pageButton(i, String(i), i === current ? 'active' : '');
+    }
+
+    if (hasMore && current < maxPage)
+      html += pageButton(current + 1, 'Next &raquo;', 'page-next');
+
     pagination.innerHTML = html;
-    pagination.querySelectorAll('.page-btn[data-page]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        currentPage = parseInt(this.dataset.page, 10);
-        performSearch(currentQuery, currentPage);
-      });
-    });
   }
+
+  // Delegated once instead of re-binding every button on every render.
+  pagination.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.page-btn[data-page]') : null;
+    if (!btn || btn.disabled) return;
+    var page = parseInt(btn.dataset.page, 10);
+    if (!page || page === currentPage) return;
+    performSearch(currentQuery, page, false, 'push');
+  });
 
   // ---------- Login Banner ----------
   function showLoginBanner() { loginBanner.classList.remove('hidden'); }
@@ -381,6 +480,20 @@
   }
 
   // ---------- Init ----------
+  window.addEventListener('popstate', function () {
+    var route = readRoute();
+    if (!route.q) { goHome(false); return; }
+    searchInput.value = route.q;
+    performSearch(route.q, route.page, false, null);
+  });
+
   checkAuth();
+
+  var initialRoute = readRoute();
+  if (initialRoute.q) {
+    searchInput.value = initialRoute.q;
+    performSearch(initialRoute.q, initialRoute.page, false, null);
+  }
+
   window.EightSearch = { showLoginBanner: showLoginBanner };
 })();

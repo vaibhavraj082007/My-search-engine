@@ -47,15 +47,6 @@ Right below the search bar sits a **3D satellite globe** that users can spin, zo
 
 All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free, no API key needed.
 
-### 📹 Bonus: Live Public Cameras
-
-Green dots on the globe mark **public traffic cameras** from government agencies around the world. Click a dot to see:
-- The live camera feed (photo or video stream)
-- The camera's owner and credit
-- Full weather details for that camera's location
-
-Currently ships with importers for **4 sources** (~8,800+ cameras across the USA, Finland, New Zealand, and Hong Kong), with a simple recipe to add dozens more.
-
 ---
 
 ## ✨ Feature Overview
@@ -69,7 +60,6 @@ Currently ships with importers for **4 sources** (~8,800+ cameras across the USA
 | Live local time of any place | ✅ | ✅ |
 | Wind speed & direction | ✅ | ✅ |
 | 16-day forecast | ✅ | ✅ |
-| Live public camera feeds | ✅ | ✅ |
 | Earthquake overlay (USGS) | ✅ | ✅ |
 | Globe/Flat & Map/Satellite toggle | ✅ | ✅ |
 | Search history & preferences | ❌ | ✅ |
@@ -85,11 +75,11 @@ Currently ships with importers for **4 sources** (~8,800+ cameras across the USA
 │                                                         │
 │               ┌──────────────────────┐                  │
 │              /    🌐 SATELLITE GLOBE   \                │
-│             /   ● ● ●  (camera dots)    \               │
-│            |    Click anywhere for live   |              │
-│            |    weather, temp, wind &     |              │
-│             \   local time of that spot  /              │
-│              \                          /               │
+│             /   Click anywhere for live \               │
+│            |    weather, temp, wind &    |              │
+│            |    local time of that spot  |              │
+│             \                          /               │
+│              \                        /                │
 │               └──────────────────────┘                  │
 │                                                         │
 │  [ 🌐 Globe/Flat ]  [ 🗺️ Map/Satellite ]  [ 🔴 Quakes ]│
@@ -106,7 +96,7 @@ Currently ships with importers for **4 sources** (~8,800+ cameras across the USA
 │   ├── index.html               # Main page: search bar + globe
 │   ├── style.css                # Colours, layout, dark theme
 │   ├── app.js                   # Search logic, login state, UTC clock
-│   ├── map.js                   # Globe, camera dots, weather panel, click handler
+│   ├── map.js                   # Globe, weather panel, click handler
 │   ├── login.html               # Login page
 │   └── signup.html              # Sign-up page
 │
@@ -117,15 +107,6 @@ Currently ships with importers for **4 sources** (~8,800+ cameras across the USA
 │   ├── searchdb.py              # Search index database
 │   ├── crawler.py               # Web crawler (respects robots.txt)
 │   ├── weather_api.py           # Weather proxy (Open-Meteo, 15-min cache)
-│   ├── cameras_api.py           # "Which cameras are on screen?" endpoint
-│   ├── camdb.py                 # Camera database schema & validation
-│   ├── healthcheck.py           # Marks dead cameras so they hide from the globe
-│   ├── import_all.py            # Runs all camera importers
-│   ├── importers/               # One file per camera source
-│   │   ├── otcm.py              # OpenTrafficCamMap — ~7,000 US cameras
-│   │   ├── finland.py           # Fintraffic — ~470 cameras
-│   │   ├── newzealand.py        # NZTA — ~320 cameras
-│   │   └── hongkong.py          # HK Transport Dept — ~1,000 cameras
 │   └── data/                    # Auto-created: SQLite databases
 │
 ├── requirements.txt             # Python dependencies
@@ -226,8 +207,7 @@ The satellite globe is the centrepiece of 8search. It sits directly below the se
 | --- | --- |
 | 🖱️ Drag | Spin the globe |
 | 🔄 Scroll | Zoom in / out |
-| 👆 Click empty ground | Weather panel for that location |
-| 👆 Click a green dot | Camera feed + weather for that spot |
+| 👆 Click anywhere | Weather panel for that location |
 | `Globe / Flat` button | Toggle 3D globe or flat map |
 | `Map / Satellite` button | Toggle street map or satellite imagery |
 | `Earthquakes` button | Show last 24 hours of M2.5+ earthquakes (USGS) |
@@ -248,49 +228,6 @@ When you click **any point** on the globe:
 | 16-day forecast | Open-Meteo | Daily |
 
 > **Note:** Days 10–16 in the forecast are dimmed because long-range predictions are rough estimates. No free weather service forecasts beyond 16 days reliably.
-
----
-
-## 📹 Public Cameras
-
-Green dots on the globe represent **public traffic cameras** published by government agencies.
-
-| Source | Region | ~Cameras | Type | Licence |
-| --- | --- | --- | --- | --- |
-| OpenTrafficCamMap | 10 US states | 7,000 | Photos + video | MIT |
-| Fintraffic | Finland | 470 | Photos (10-min refresh) | CC BY 4.0 |
-| NZTA | New Zealand | 320 | Photos | NZTA Data Licence |
-| HK Transport Dept | Hong Kong | 1,000 | Photos | data.gov.hk terms |
-
-### Adding More Camera Sources
-
-The system is designed to grow. Dozens more sources are available (see section below):
-
-1. Copy `backend/importers/finland.py` → `backend/importers/yourplace.py`
-2. Change `NAME`, `URL`, the `parse` function, and `credit` text
-3. Add it to `backend/import_all.py`
-4. Run `python3 import_all.py yourplace && python3 healthcheck.py`
-
-### Available Sources to Add
-
-From the [OSIRIS project](https://github.com/simplifaisoul/osiris) (MIT licence):
-
-> Alberta · Arizona · Austria · Australia · Basque Country · Bulgaria · Czechia · Delaware · Edmonton · Florida · France · Georgia (US) · Germany · Greece · Idaho · Indiana · Iceland · Italy · Japan · Lithuania · Louisiana · Macedonia · Maryland · Michigan · Netherlands · Nevada · North Carolina · Ontario · Oregon · Poland · Romania · Serbia · Slovakia · South Carolina · Spain · Sweden · Switzerland · Taiwan · Texas · Thailand · Turkey · Utah · Virginia · Quebec
-
-Also: **Windy Webcams**, **Singapore LTA DataMall**, **Transport for NSW**, **TfL London**.
-
-### Camera Healthcheck
-
-```bash
-python3 healthcheck.py
-```
-
-Visits every camera URL and marks dead ones so they disappear from the globe. Run after importing, then schedule nightly:
-
-```bash
-# Add to crontab -e (replace YOURNAME):
-0 3 * * * cd /Users/YOURNAME/8search/backend && /Users/YOURNAME/8search/venv/bin/python healthcheck.py >> health.log 2>&1
-```
 
 ---
 
@@ -334,9 +271,7 @@ Key endpoints:
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/search?q=...` | GET | Answer-first web search (cached, rate-limited) |
-| `/api/cameras?bounds=...` | GET | Cameras within map bounds |
 | `/api/weather?lat=...&lon=...` | GET | Live weather for coordinates |
-| `/api/stats` | GET | Camera count per source |
 | `/api/signup` | POST | Create account |
 | `/api/login` | POST | Log in (sends a sign-in alert email) |
 | `/api/logout` | POST | Log out |
@@ -355,11 +290,7 @@ Key endpoints:
 | `command not found: python3` | Install Python 3.9+ from [python.org](https://www.python.org/downloads/) |
 | `No module named fastapi` | Activate the venv: `source venv/bin/activate` |
 | Blank globe | Open browser console (Cmd+Option+J) and check for errors |
-| Globe shows but no camera dots | Run `python3 import_all.py`, reload. Check `/api/stats` |
-| Camera shows broken image | Camera is offline. Run `python3 healthcheck.py` |
-| No cluster numbers on circles | Font CDN was blocked. Dots still work |
 | `502` on weather | Open-Meteo is temporarily unreachable |
-| Camera images blocked (HTTPS) | A page on `https://` can't load `http://` images. Prefer HTTPS cameras |
 
 ---
 
@@ -373,7 +304,6 @@ Key endpoints:
 - **YouTube:** scraping results pages will be blocked at scale. Use the YouTube Data API.
 - **Map tiles:** OpenStreetMap and Esri tiles have usage limits. Switch to a commercial tile provider for heavy traffic.
 - **Weather API:** Open-Meteo is free for **non-commercial use only**. Review their [terms](https://open-meteo.com/en/terms).
-- **Camera licences:** Keep each source's credit visible. The panel already shows per-camera credits.
 - **Authentication:** Add HTTPS, rate-limit failed logins, and consider OAuth for production.
 - **Crawler:** Maintain the 1-second delay and always respect `robots.txt`.
 
@@ -390,7 +320,6 @@ math, environment variables, and load-test instructions.
 - [x] Click-anywhere live weather (temp, wind, rain, clouds)
 - [x] Live local time of clicked location
 - [x] 16-day forecast
-- [x] Public camera feeds on the globe
 - [x] Earthquake overlay (USGS)
 - [x] User accounts with secure password hashing
 - [ ] Search suggestions / autocomplete
@@ -398,7 +327,6 @@ math, environment variables, and load-test instructions.
 - [ ] Bookmarked locations on the globe
 - [ ] Dark / light theme toggle
 - [ ] Mobile-responsive globe
-- [ ] More camera sources (50+ countries)
 - [ ] Air quality index overlay
 - [ ] Sunrise / sunset times in weather panel
 

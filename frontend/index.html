@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#f6efe3">
   <title>8search</title>
-  <link rel="stylesheet" href="style.css?v=20261112-3">
+  <link rel="stylesheet" href="style.css?v=20261113-3">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
@@ -55,7 +55,7 @@
   <!-- Search Results -->
   <section id="resultsSection" class="results-section hidden">
     <div id="resultsContainer" class="results-container"></div>
-    <div id="pagination" class="pagination"></div>
+    <div id="pagination" class="pagination" role="navigation" aria-label="Search result pages"></div>
   </section>
 
   <footer class="site-footer">
@@ -77,8 +77,24 @@
     <button id="bannerDismiss" class="banner-dismiss">&times;</button>
   </div>
 
+  <!-- Sign-in prompt shown to guests on first visit -->
+  <div id="signinPrompt" class="signin-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="signinPromptTitle">
+    <div class="signin-backdrop" id="signinBackdrop"></div>
+    <div class="signin-card" role="document">
+      <button type="button" class="signin-close" id="signinClose" aria-label="Close sign-in prompt">&times;</button>
+
+      <div class="signin-mark" aria-hidden="true"><span class="logo-8">8</span>search</div>
+      <h2 id="signinPromptTitle" class="signin-title">Sign in to 8search</h2>
+      <p class="signin-copy">Unlock unlimited searches, keep your history, and get answers faster.</p>
+
+      <a href="login.html" class="signin-continue" id="signinContinue">Continue with email</a>
+      <p class="signin-switch">New to 8search? <a href="signup.html">Create an account</a></p>
+      <p class="signin-note">Free forever. No credit card required.</p>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js?v=20261112-3"></script>
+  <script src="app.js?v=20261113-3"></script>
   <script src="map.js?v=20261112-3"></script>
 </body>
 </html>

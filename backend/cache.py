@@ -97,11 +97,18 @@ class Cache:
         factory: Callable[[], Awaitable[Any]],
         ttl: int | None,
         should_cache: ShouldCache,
+        negative_ttl: int,
     ) -> Any:
         try:
             value = await factory()
-            if value is not None and (should_cache is None or should_cache(value)):
-                await self.set(key, value, ttl)
+            if value is not None:
+                if should_cache is None or should_cache(value):
+                    await self.set(key, value, ttl)
+                elif negative_ttl > 0:
+                    # Cache empty/failed results briefly. This keeps a broken
+                    # upstream from being hammered by every request while still
+                    # letting the page recover quickly.
+                    await self.set(key, value, negative_ttl)
             return value
         finally:
             async with self._inflight_lock:
@@ -114,6 +121,7 @@ class Cache:
         factory: Callable[[], Awaitable[Any]],
         ttl: int | None = None,
         should_cache: ShouldCache = None,
+        negative_ttl: int = 0,
     ) -> tuple[Any, bool]:
         """Return (value, cache_hit). Concurrent misses share one computation."""
         cached = await self.get(key)
@@ -123,7 +131,9 @@ class Cache:
         async with self._inflight_lock:
             task = self._inflight.get(key)
             if task is None:
-                task = asyncio.create_task(self._compute(key, factory, ttl, should_cache))
+                task = asyncio.create_task(
+                    self._compute(key, factory, ttl, should_cache, negative_ttl)
+                )
                 self._inflight[key] = task
 
         # shield keeps the shared computation alive if this request is cancelled

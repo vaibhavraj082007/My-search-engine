@@ -8,13 +8,14 @@ Designed for high request volume:
 """
 
 import asyncio
+import html
 import os
 import re
 import traceback
 import uuid
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from fastapi import APIRouter, Cookie, HTTPException, Query, Response
 from starlette.concurrency import run_in_threadpool
@@ -39,16 +40,27 @@ _WHITESPACE = re.compile(r"\s+")
 
 GUEST_SEARCH_LIMIT = 4
 
+RESULTS_PER_PAGE = max(1, min(10, int(os.getenv("RESULTS_PER_PAGE", "10"))))
+MAX_SEARCH_PAGE = max(1, int(os.getenv("MAX_SEARCH_PAGE", "10")))
+UPSTREAM_RESULTS_PER_PAGE = max(
+    RESULTS_PER_PAGE, int(os.getenv("UPSTREAM_RESULTS_PER_PAGE", "15"))
+)
+WEB_CHUNK_CACHE_TTL = int(os.getenv("WEB_CHUNK_CACHE_TTL", "900"))
+WEB_CHUNK_EMPTY_CACHE_TTL = int(os.getenv("WEB_CHUNK_EMPTY_CACHE_TTL", "30"))
+SEARCH_EMPTY_CACHE_TTL = int(os.getenv("SEARCH_EMPTY_CACHE_TTL", "30"))
+
 SEARCH_CACHE_TTL = int(os.getenv("SEARCH_CACHE_TTL", "300"))
 SEARCH_CONCURRENCY = int(os.getenv("SEARCH_CONCURRENCY", "64"))
 SEARCH_QUEUE_TIMEOUT = float(os.getenv("SEARCH_QUEUE_TIMEOUT", "5"))
-SEARCH_TIMEOUT = float(os.getenv("SEARCH_TIMEOUT", "7"))
+SEARCH_TIMEOUT = float(os.getenv("SEARCH_TIMEOUT", "15"))
 NEWS_TIMEOUT = float(os.getenv("NEWS_TIMEOUT", "6"))
 META_TIMEOUT = float(os.getenv("META_TIMEOUT", "5"))
 ANSWER_SOURCE_TIMEOUT = float(os.getenv("ANSWER_SOURCE_TIMEOUT", "4"))
 VIDEO_TIMEOUT = float(os.getenv("VIDEO_TIMEOUT", "6"))
 DDGS_CONCURRENCY = max(1, int(os.getenv("DDGS_CONCURRENCY", "6")))
 DDGS_TIMEOUT = float(os.getenv("DDGS_TIMEOUT", "4"))
+DDGS_RETRY_DELAY = float(os.getenv("DDGS_RETRY_DELAY", "0.4"))
+UPSTREAM_MIN_RESULTS = max(1, int(os.getenv("UPSTREAM_MIN_RESULTS", "5")))
 DISABLE_LOCAL_INDEX = os.getenv("DISABLE_LOCAL_INDEX", "0") == "1"
 
 _search_semaphore = asyncio.Semaphore(SEARCH_CONCURRENCY)
@@ -89,12 +101,16 @@ async def _run_ddgs(fn, *args):
 
 # ── Web search ───────────────────────────────────────────────────────────
 
-def _ddgs_web_search(query: str, max_results: int = 15, page: int = 1) -> list[dict]:
+def _ddgs_web_search(
+    query: str, max_results: int = 15, page: int = 1, backend: str = "auto"
+) -> list[dict]:
     """Fetch web results through the ddgs library (blocking, run in a thread)."""
     try:
         results = []
         with _get_ddgs() as ddgs:
-            for r in ddgs.text(query, max_results=max_results, page=page):
+            for r in ddgs.text(
+                query, max_results=max_results, page=page, backend=backend
+            ):
                 results.append({
                     "url":     r.get("href", ""),
                     "title":   r.get("title", ""),
@@ -107,7 +123,7 @@ def _ddgs_web_search(query: str, max_results: int = 15, page: int = 1) -> list[d
         return []
 
 
-async def _html_web_search(query: str, max_results: int = 15) -> list[dict]:
+async def _html_web_search(query: str, max_results: int = 15, page: int = 1) -> list[dict]:
     """Fallback: parse DuckDuckGo's lightweight HTML result page."""
     try:
         from bs4 import BeautifulSoup
@@ -115,7 +131,7 @@ async def _html_web_search(query: str, max_results: int = 15) -> list[dict]:
         client = await get_http_client()
         response = await client.get(
             "https://html.duckduckgo.com/html/",
-            params={"q": query},
+            params={"q": query, "s": (page - 1) * 10},
             timeout=10.0,
         )
         if response.status_code != 200:
@@ -200,18 +216,245 @@ def _merge_results(primary: list[dict], extra: list[dict], limit: int) -> list[d
     return merged
 
 
-async def _web_search(query: str, max_results: int = 15, page: int = 1) -> list[dict]:
-    """Web results with complementary fallbacks when a provider is limited."""
-    results = await _run_ddgs(_ddgs_web_search, query, max_results, page)
+def _is_usable_result_url(url: str) -> bool:
+    """Reject ad/tracking redirects that providers sometimes return as hits."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    if host.endswith("bing.com") and parsed.path.startswith(("/aclick", "/ck/a")):
+        return False
+    if host.endswith("duckduckgo.com") and parsed.path.startswith("/y.js"):
+        return False
+    return True
 
-    if len(results) < 5:
-        extra = await _bing_rss_web_search(query, max_results, page)
-        results = _merge_results(results, extra, max_results)
 
-    if not results:
-        results = await _html_web_search(query, max_results)
+def _dedupe_results(results: list[dict]) -> list[dict]:
+    """Keep the first usable occurrence of each URL, preserving order."""
+    pool, seen = [], set()
+    for result in results:
+        url = result.get("url", "")
+        if not _is_usable_result_url(url):
+            continue
+        key = _normalize_url(url)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        pool.append(result)
+    return pool
 
-    return results[:max_results]
+
+async def _fetch_web_chunk(query: str, upstream_page: int) -> list[dict]:
+    """Fetch one upstream page and merge independent providers.
+
+    Three independent sources are queried in parallel: the ddgs "auto" pool,
+    Bing RSS, and Yahoo. No single provider is dependable under load, but their
+    union almost always fills a page. Results are de-duplicated here, which is
+    what makes page slices stable and non-repeating. Everything is cached, so
+    the extra breadth costs one set of calls per query/page per cache window
+    rather than one per user request.
+    """
+    limit = UPSTREAM_RESULTS_PER_PAGE * 2
+    ddgs_results, bing_results, yahoo_results = await asyncio.gather(
+        _run_ddgs(_ddgs_web_search, query, UPSTREAM_RESULTS_PER_PAGE, upstream_page),
+        _bing_rss_web_search(query, UPSTREAM_RESULTS_PER_PAGE, upstream_page),
+        _run_ddgs(
+            _ddgs_web_search,
+            query,
+            UPSTREAM_RESULTS_PER_PAGE,
+            upstream_page,
+            "yahoo",
+        ),
+    )
+
+    merged = _merge_results(ddgs_results, bing_results, limit)
+    merged = _merge_results(merged, yahoo_results, limit)
+
+    # DDG intermittently returns an empty/short page when it is throttling.
+    # One short retry recovers most of those pages; the retry is cached with
+    # the chunk, so the extra upstream call happens only on a cache miss.
+    if len(merged) < UPSTREAM_MIN_RESULTS:
+        await asyncio.sleep(DDGS_RETRY_DELAY)
+        retry = await _run_ddgs(
+            _ddgs_web_search, query, UPSTREAM_RESULTS_PER_PAGE, upstream_page
+        )
+        merged = _merge_results(merged, retry, limit)
+
+    if not merged:
+        merged = await _html_web_search(
+            query, UPSTREAM_RESULTS_PER_PAGE, upstream_page
+        )
+
+    return _dedupe_results(merged)
+
+
+async def _web_chunk(query: str, upstream_page: int) -> list[dict]:
+    """Cache one upstream page. Concurrent misses share one fetch."""
+    results, _ = await cache.get_or_set(
+        _web_chunk_key(query, upstream_page),
+        lambda: _fetch_web_chunk(query, upstream_page),
+        ttl=WEB_CHUNK_CACHE_TTL,
+        should_cache=lambda value: bool(value),
+        negative_ttl=WEB_CHUNK_EMPTY_CACHE_TTL,
+    )
+    return results or []
+
+
+async def _choose_page_chunk(query: str, page: int, seen_keys: set[str]) -> int:
+    """Pick the upstream page that supplies a result page.
+
+    Upstream pages are flaky: a page can come back empty, or repeat URLs that
+    earlier result pages already showed. Walking one page forward (and skipping
+    chunks already used by another result page) keeps pagination useful without
+    ever reusing a chunk. ``seen_keys`` is the set of URLs that earlier pages
+    already displayed.
+    """
+    used = set()
+    for other_page in range(1, MAX_SEARCH_PAGE + 1):
+        if other_page == page:
+            continue
+        mapped = await cache.get(_page_chunk_key(query, other_page))
+        if isinstance(mapped, int) and mapped > 0:
+            used.add(mapped)
+
+    last_candidate = min(MAX_SEARCH_PAGE + 1, page + 1)
+    for candidate in range(page, last_candidate + 1):
+        if candidate in used:
+            continue
+        chunk = await _web_chunk(query, candidate)
+        if any(
+            _normalize_url(item.get("url", "")) not in seen_keys
+            for item in chunk
+        ):
+            return candidate
+    return 0
+
+
+async def _wiki_search_page(query: str, page: int, max_results: int = 10) -> list[dict]:
+    """Paginated Wikipedia search used to fill pages when web search throttles."""
+    try:
+        client = await get_http_client()
+        response = await client.get(
+            "https://en.wikipedia.org/w/api.php",
+            params={
+                "action": "query",
+                "list": "search",
+                "srsearch": query,
+                "srlimit": max_results,
+                "sroffset": (page - 1) * max_results,
+                "format": "json",
+                "formatversion": "2",
+                "srprop": "snippet",
+            },
+            timeout=8.0,
+        )
+        if response.status_code != 200:
+            return []
+
+        items = response.json().get("query", {}).get("search", [])
+        results = []
+        for item in items:
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+            snippet = html.unescape(re.sub(r"<[^>]+>", "", item.get("snippet") or ""))
+            results.append({
+                "url": "https://en.wikipedia.org/wiki/" + quote(title.replace(" ", "_")),
+                "title": title,
+                "snippet": snippet,
+                "source": "Wikipedia",
+            })
+        return results
+    except Exception:
+        return []
+
+
+async def _wiki_chunk(query: str, page: int) -> list[dict]:
+    results, _ = await cache.get_or_set(
+        _wiki_chunk_key(query, page),
+        lambda: _wiki_search_page(query, page, RESULTS_PER_PAGE),
+        ttl=WEB_CHUNK_CACHE_TTL,
+        should_cache=lambda value: bool(value),
+        negative_ttl=WEB_CHUNK_EMPTY_CACHE_TTL,
+    )
+    return results or []
+
+
+async def _web_results_page(query: str, page: int) -> tuple[list[dict], int, bool]:
+    """Build one page, guaranteed not to repeat URLs from earlier pages.
+
+    Each result page is backed by one upstream page (or the next healthy one
+    when a provider throttles). Every page is filtered against the URLs used by
+    all earlier result pages, so page N never repeats page N-1.
+    """
+    seen_keys = set()
+    for other_page in range(1, MAX_SEARCH_PAGE + 1):
+        if other_page == page:
+            continue
+        mapped = await cache.get(_page_chunk_key(query, other_page))
+        if isinstance(mapped, int):
+            chunk_number = mapped if mapped > 0 else 0
+        elif other_page < page:
+            # The earlier page has not been opened yet, but its natural
+            # upstream chunk may already be cached by another request.
+            chunk_number = other_page
+        else:
+            chunk_number = 0
+
+        if chunk_number:
+            cached = await cache.get(_web_chunk_key(query, chunk_number))
+            for item in cached or []:
+                url = item.get("url", "")
+                if _is_usable_result_url(url):
+                    seen_keys.add(_normalize_url(url))
+
+        # Wiki fallback can fill a page even when its web chunk is empty, so
+        # always replay it for earlier pages (mapped chunk 0 included).
+        wiki_cached = await cache.get(_wiki_chunk_key(query, other_page))
+        for item in wiki_cached or []:
+            url = item.get("url", "")
+            if _is_usable_result_url(url):
+                seen_keys.add(_normalize_url(url))
+
+    chunk_number, _ = await cache.get_or_set(
+        _page_chunk_key(query, page),
+        lambda: _choose_page_chunk(query, page, seen_keys),
+        ttl=WEB_CHUNK_CACHE_TTL,
+        should_cache=lambda value: bool(value),
+        negative_ttl=WEB_CHUNK_EMPTY_CACHE_TTL,
+    )
+    current = await _web_chunk(query, chunk_number) if chunk_number else []
+
+    page_results = [
+        item for item in _dedupe_results(current)
+        if _normalize_url(item.get("url", "")) not in seen_keys
+    ][:RESULTS_PER_PAGE]
+
+    # Web providers are the first choice, but they throttle aggressively.
+    # Top up a thin page with paginated Wikipedia matches instead of returning
+    # an empty page or repeating links from an earlier page.
+    if len(page_results) < RESULTS_PER_PAGE:
+        page_keys = {_normalize_url(item.get("url", "")) for item in page_results}
+        for item in await _wiki_chunk(query, page):
+            url = item.get("url", "")
+            key = _normalize_url(url)
+            if (
+                not _is_usable_result_url(url)
+                or key in seen_keys
+                or key in page_keys
+            ):
+                continue
+            page_keys.add(key)
+            page_results.append(item)
+            if len(page_results) >= RESULTS_PER_PAGE:
+                break
+
+    total = max(len(seen_keys) + len(page_results), (page - 1) * RESULTS_PER_PAGE + len(page_results))
+    has_more = page < MAX_SEARCH_PAGE and bool(page_results)
+    return page_results, total, has_more
 
 
 # ── News search ──────────────────────────────────────────────────────────
@@ -340,6 +583,8 @@ def _clean_web_results(
     seen = set()
     for result in web_results:
         url = result.get("url") or ""
+        if not _is_usable_result_url(url):
+            continue
         key = _normalize_url(url)
         if not key or key in seen:
             continue
@@ -364,30 +609,51 @@ async def _with_timeout(task: asyncio.Task, default, seconds: float):
 
 
 async def _collect_payload(query: str, page: int) -> dict:
-    web_task = asyncio.create_task(_web_search(query, 15, page))
-    news_task = asyncio.create_task(_news_search(query, 6))
-    meta_task = asyncio.create_task(_answer_meta(query))
-    videos_task = asyncio.create_task(get_videos(query, 4))
+    first_page = page == 1
+
+    web_task = asyncio.create_task(_web_results_page(query, page))
+
+    # Answers, news, videos, and Wikipedia are identical on every page and
+    # cost several upstream calls. Fetch them only for page 1 so paging stays
+    # cheap when a lot of users are browsing at once.
+    news_task = meta_task = videos_task = None
+    if first_page:
+        news_task = asyncio.create_task(_news_search(query, 6))
+        meta_task = asyncio.create_task(_answer_meta(query))
+        videos_task = asyncio.create_task(get_videos(query, 4))
 
     # Each source has its own budget. A slow or broken provider returns an
     # empty section instead of taking down the whole result page.
-    web_results, news_results, meta, videos = await asyncio.gather(
-        _with_timeout(web_task, [], SEARCH_TIMEOUT),
-        _with_timeout(news_task, [], NEWS_TIMEOUT),
-        _with_timeout(meta_task, (None, None, None), META_TIMEOUT),
-        _with_timeout(videos_task, [], VIDEO_TIMEOUT),
+    web_results, pool_size, has_more = await _with_timeout(
+        web_task, ([], 0, False), SEARCH_TIMEOUT
     )
 
+    if first_page:
+        news_results, meta, videos = await asyncio.gather(
+            _with_timeout(news_task, [], NEWS_TIMEOUT),
+            _with_timeout(meta_task, (None, None, None), META_TIMEOUT),
+            _with_timeout(videos_task, [], VIDEO_TIMEOUT),
+        )
+    else:
+        news_results, meta, videos = [], (None, None, None), []
+
     wikipedia, wiktionary, instant = meta
-    answer = build_answer(query, wikipedia, wiktionary, instant)
+    answer = build_answer(query, wikipedia, wiktionary, instant) if first_page else None
     web_results = _clean_web_results(web_results, wikipedia, videos)
 
-    # Merge local index (bonus results)
-    if not DISABLE_LOCAL_INDEX:
+    # Fill a short page from the local index. It is page-aware (LIMIT/OFFSET),
+    # so it never turns into duplicate results across pages.
+    if not DISABLE_LOCAL_INDEX and len(web_results) < RESULTS_PER_PAGE:
         try:
-            local_data = await asyncio.to_thread(searchdb.search, query, page)
+            local_data = await asyncio.to_thread(
+                searchdb.search, query, page, RESULTS_PER_PAGE
+            )
             seen_urls = {_normalize_url(r["url"]) for r in web_results}
             for local_result in local_data.get("results", []):
+                if len(web_results) >= RESULTS_PER_PAGE:
+                    break
+                if not _is_usable_result_url(local_result["url"]):
+                    continue
                 key = _normalize_url(local_result["url"])
                 if key and key not in seen_urls:
                     web_results.append(local_result)
@@ -395,14 +661,19 @@ async def _collect_payload(query: str, page: int) -> dict:
         except Exception:
             pass
 
+    total = max(pool_size, (page - 1) * RESULTS_PER_PAGE + len(web_results))
+
     return {
         "results": web_results,
         "news":    news_results,
         "answer":  answer,
         "wikipedia": wikipedia,
         "videos":  videos,
-        "total":   len(web_results),
+        "total":   total,
         "page":    page,
+        "per_page": RESULTS_PER_PAGE,
+        "has_more": bool(has_more),
+        "max_page": MAX_SEARCH_PAGE,
         "limit_reached": False,
     }
 
@@ -433,9 +704,27 @@ def _has_content(payload: dict) -> bool:
     )
 
 
+def _normalize_query(query: str) -> str:
+    return _WHITESPACE.sub(" ", query).strip().casefold()
+
+
 def _cache_key(query: str, page: int) -> str:
-    normalized = _WHITESPACE.sub(" ", query).strip().casefold()
-    return f"8s:search:v1:{page}:{normalized}"
+    return f"8s:search:v2:{page}:{RESULTS_PER_PAGE}:{_normalize_query(query)}"
+
+
+def _web_chunk_key(query: str, upstream_page: int) -> str:
+    return (
+        f"8s:web:v2:{UPSTREAM_RESULTS_PER_PAGE}:{upstream_page}:"
+        f"{_normalize_query(query)}"
+    )
+
+
+def _page_chunk_key(query: str, page: int) -> str:
+    return f"8s:pagechunk:v1:{page}:{_normalize_query(query)}"
+
+
+def _wiki_chunk_key(query: str, page: int) -> str:
+    return f"8s:wiki:v1:{page}:{_normalize_query(query)}"
 
 
 # ── Route ────────────────────────────────────────────────────────────────
@@ -444,7 +733,7 @@ def _cache_key(query: str, page: int) -> str:
 async def search(
     response: Response,
     q: str = Query("", min_length=0, max_length=400),
-    page: int = Query(1, ge=1, le=10),
+    page: int = Query(1, ge=1, le=MAX_SEARCH_PAGE),
     session_token: str | None = Cookie(default=None),
     guest_id: str | None = Cookie(default=None),
     guest_searches: str | None = Cookie(default=None),
@@ -453,7 +742,8 @@ async def search(
     if not query:
         return {
             "results": [], "news": [], "answer": None, "wikipedia": None,
-            "videos": [], "total": 0, "page": 1, "limit_reached": False,
+            "videos": [], "total": 0, "page": 1, "per_page": RESULTS_PER_PAGE,
+            "has_more": False, "max_page": MAX_SEARCH_PAGE, "limit_reached": False,
         }
 
     user = await run_in_threadpool(get_current_user, session_token)
@@ -464,23 +754,25 @@ async def search(
         url = query if query.startswith(("http://", "https://")) else f"https://{query}"
         return {"redirect": url}
 
-    # Guest rate-limiting
+    # Guest rate-limiting. Only a brand-new search (page 1) consumes quota;
+    # paging through results the guest already unlocked must stay free.
     if is_guest:
-        count = int(guest_searches or "0")
-        if count >= GUEST_SEARCH_LIMIT:
-            return {
-                "results": [], "news": [], "answer": None, "wikipedia": None,
-                "videos": [], "total": 0, "page": 1,
-                "limit_reached": True,
-                "message": "Please sign in for unlimited searches",
-            }
-        count += 1
         if not guest_id:
             guest_id = uuid.uuid4().hex
             response.set_cookie(key="guest_id", value=guest_id,
                                 httponly=True, samesite="lax", max_age=86400, path="/")
-        response.set_cookie(key="guest_searches", value=str(count),
-                            httponly=False, samesite="lax", max_age=86400, path="/")
+
+        if page == 1:
+            count = int(guest_searches or "0")
+            if count >= GUEST_SEARCH_LIMIT:
+                return {
+                    "results": [], "news": [], "answer": None, "wikipedia": None,
+                    "videos": [], "total": 0, "page": 1,
+                    "limit_reached": True,
+                    "message": "Please sign in for unlimited searches",
+                }
+            response.set_cookie(key="guest_searches", value=str(count + 1),
+                                httponly=False, samesite="lax", max_age=86400, path="/")
 
     try:
         payload, cache_hit = await cache.get_or_set(
@@ -488,6 +780,7 @@ async def search(
             lambda: _collect_payload_limited(query, page),
             ttl=SEARCH_CACHE_TTL,
             should_cache=_has_content,
+            negative_ttl=SEARCH_EMPTY_CACHE_TTL,
         )
     except HTTPException:
         raise

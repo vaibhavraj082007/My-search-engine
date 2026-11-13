@@ -39,6 +39,10 @@ Browser
   before work starts.
 - **Cache stampedes:** concurrent requests for the same query share a single
   upstream computation.
+- **Pagination:** each upstream result page is cached separately and sliced from
+  one de-duplicated pool, so page N never repeats page N-1's URLs. Page 2+ skips
+  the news/Wikipedia/video enrichment work, and pagination does not consume
+  guest search quota.
 - **Slow providers:** every source has its own timeout (`SEARCH_TIMEOUT`,
   `NEWS_TIMEOUT`, `META_TIMEOUT`, `VIDEO_TIMEOUT`). A slow provider is skipped
   and the rest of the page still renders with partial results.
@@ -103,16 +107,24 @@ Autoscale on CPU and request latency, not raw request count.
 | `WEB_CONCURRENCY` | `4` (Docker) | Uvicorn worker processes |
 | `REDIS_URL` | unset | Shared cache + rate limits; required for multiple replicas |
 | `SEARCH_CACHE_TTL` | `300` | Seconds to cache a search payload |
+| `RESULTS_PER_PAGE` | `10` | Results shown per page (capped at 10) |
+| `MAX_SEARCH_PAGE` | `10` | Last page users can open |
+| `UPSTREAM_RESULTS_PER_PAGE` | `15` | Max results pulled from each upstream page |
+| `WEB_CHUNK_CACHE_TTL` | `900` | Seconds an upstream result chunk stays cached |
+| `WEB_CHUNK_EMPTY_CACHE_TTL` | `30` | Seconds an empty/failed upstream chunk is negatively cached |
+| `SEARCH_EMPTY_CACHE_TTL` | `30` | Seconds an empty result page is negatively cached |
 | `CACHE_MAX_ITEMS` | `5000` | In-memory cache entries per worker |
 | `SEARCH_CONCURRENCY` | `64` | Concurrent upstream searches per worker |
 | `SEARCH_QUEUE_TIMEOUT` | `5` | Seconds to wait for an upstream slot |
-| `SEARCH_TIMEOUT` | `7` | Web-search budget per request |
+| `SEARCH_TIMEOUT` | `15` | Web-search budget per request |
 | `NEWS_TIMEOUT` | `6` | News budget per request |
 | `META_TIMEOUT` | `5` | Wikipedia/Wiktionary/answer budget |
 | `ANSWER_SOURCE_TIMEOUT` | `4` | Per-source budget inside the answer block |
 | `VIDEO_TIMEOUT` | `6` | Video budget per request |
 | `DDGS_CONCURRENCY` | `6` | Blocking DDGS scrapes allowed at once per worker |
 | `DDGS_TIMEOUT` | `4` | Hard timeout for a blocking DDGS scrape |
+| `DDGS_RETRY_DELAY` | `0.4` | Seconds to wait before retrying a short DDGS page |
+| `UPSTREAM_MIN_RESULTS` | `5` | Retry DDGS when a page returns fewer results than this |
 | `DDGS_VIDEO_CONCURRENCY` | `3` | Blocking video fallbacks allowed at once |
 | `DDGS_VIDEO_TIMEOUT` | `4` | Hard timeout for a video fallback |
 | `RATE_LIMIT_PER_MINUTE` | `120` | Per-IP API requests per minute (`0` disables) |
