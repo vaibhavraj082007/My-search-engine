@@ -90,9 +90,71 @@
     doSearch(searchInput.value.trim());
   });
 
+  var searchIcon = document.querySelector('.search-icon');
+  if (searchIcon) {
+    searchIcon.style.cursor = 'pointer';
+    searchIcon.addEventListener('click', function () {
+      doSearch(searchInput.value.trim());
+    });
+  }
+
   if (luckyBtn) luckyBtn.addEventListener('click', function () {
     doSearch(searchInput.value.trim(), true);
   });
+
+  // ---------- Landing category pills ----------
+  var landingPills = document.querySelectorAll('.landing-pill');
+  landingPills.forEach(function (pill) {
+    pill.addEventListener('click', function () {
+      var q = pill.getAttribute('data-query') || pill.textContent.trim();
+      searchInput.value = q;
+      doSearch(q);
+    });
+  });
+
+  // ---------- Voice search (mic button) ----------
+  var micBtn = document.getElementById('voiceSearchBtn');
+  if (micBtn) {
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRec) {
+      var recognition = new SpeechRec();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = function () {
+        micBtn.classList.add('listening');
+        searchInput.placeholder = 'Listening… speak now';
+      };
+      recognition.onresult = function (event) {
+        var transcript = event.results && event.results[0] && event.results[0][0] ? event.results[0][0].transcript : '';
+        if (transcript) {
+          searchInput.value = transcript;
+          doSearch(transcript);
+        }
+      };
+      recognition.onerror = function () {
+        micBtn.classList.remove('listening');
+        searchInput.placeholder = 'Discover the exceptional...';
+      };
+      recognition.onend = function () {
+        micBtn.classList.remove('listening');
+        searchInput.placeholder = 'Discover the exceptional...';
+      };
+
+      micBtn.addEventListener('click', function () {
+        try {
+          recognition.start();
+        } catch (err) {
+          try { recognition.stop(); } catch (e) {}
+        }
+      });
+    } else {
+      micBtn.addEventListener('click', function () {
+        searchInput.focus();
+      });
+    }
+  }
 
   // ---------- URL / history ----------
   function readRoute() {
