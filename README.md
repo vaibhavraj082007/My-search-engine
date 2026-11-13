@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/assets/logo.png" alt="8search logo" width="120" />
+  <img src="frontend/assets/logo.png" alt="8search logo" width="260" />
 </p>
 
 <h1 align="center">8search</h1>
