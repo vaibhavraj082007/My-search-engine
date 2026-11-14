@@ -18,13 +18,42 @@
   var luckyBtn        = document.getElementById('luckyBtn');
   var utcClock        = document.getElementById('utcClock');
   var globeSection    = document.querySelector('.globe-section');
+  var signinPrompt    = document.getElementById('signinPrompt');
+  var signinBackdrop  = document.getElementById('signinBackdrop');
+  var signinClose     = document.getElementById('signinClose');
+  var signinContinue  = document.getElementById('signinContinue');
+  var feedbackForm    = document.getElementById('feedbackForm');
+  var feedbackName    = document.getElementById('feedbackName');
+  var feedbackEmail   = document.getElementById('feedbackEmail');
+  var feedbackMessage = document.getElementById('feedbackMessage');
+  var feedbackSubmit  = document.getElementById('feedbackSubmit');
+  var feedbackStatus  = document.getElementById('feedbackStatus');
+  var cameraSearchBtn = document.getElementById('cameraSearchBtn');
+  var searchTabs      = document.querySelectorAll('.search-tab');
+  var addShortcutBtn  = document.getElementById('addShortcutBtn');
+  var shortcutRow     = document.getElementById('shortcutRow');
+  var closeGlobeBtn   = document.getElementById('closeGlobeBtn');
+  var infoDialog      = document.getElementById('infoDialog');
+  var infoTitle       = document.getElementById('infoTitle');
+  var infoBody        = document.getElementById('infoBody');
+  var infoClose       = document.getElementById('infoClose');
 
   var currentUser  = null;
   var currentQuery = '';
   var currentPage  = 1;
+  var currentMode  = 'web';
   var searchSeq    = 0;
   var PAGE_WINDOW  = 5;
   var MAX_PAGE     = 10;
+  var signinShown  = false;
+  var MODES        = ['web', 'ai', 'images', 'code'];
+
+  var MODE_PLACEHOLDERS = {
+    web:      'Search anything or type a calculation…',
+    ai:       'Ask a question and get a direct answer…',
+    images:   'Search for images…',
+    code:     'Search code, repos, and documentation…'
+  };
 
   // ---------- UTC Clock ----------
   function updateUTCClock() {
@@ -37,12 +66,51 @@
   updateUTCClock();
   setInterval(updateUTCClock, 1000);
 
+  // ---------- Sign-in prompt ----------
+  function showSigninPrompt() {
+    if (!signinPrompt || currentUser || signinShown) return;
+    signinShown = true;
+    signinPrompt.classList.remove('hidden');
+    document.body.classList.add('signin-open');
+    window.setTimeout(function () {
+      // Don't steal focus if the visitor already started typing.
+      if (signinContinue && document.activeElement === document.body) {
+        signinContinue.focus();
+      }
+    }, 60);
+  }
+
+  function hideSigninPrompt() {
+    if (!signinPrompt) return;
+    signinPrompt.classList.add('hidden');
+    document.body.classList.remove('signin-open');
+    if (searchInput) searchInput.focus();
+  }
+
+  if (signinClose) signinClose.addEventListener('click', hideSigninPrompt);
+  if (signinBackdrop) signinBackdrop.addEventListener('click', hideSigninPrompt);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !signinPrompt) return;
+    if (!signinPrompt.classList.contains('hidden')) hideSigninPrompt();
+  });
+
   // ---------- Auth ----------
   function checkAuth() {
     fetch('/api/me', { credentials: 'same-origin' })
       .then(function (r) { if (!r.ok) throw 0; return r.json(); })
-      .then(function (d) { currentUser = d.email; renderUserArea(); })
-      .catch(function () { currentUser = null; renderUserArea(); });
+      .then(function (d) {
+        currentUser = d.email;
+        if (feedbackEmail && !feedbackEmail.value) feedbackEmail.value = currentUser;
+        renderUserArea();
+      })
+      .catch(function () {
+        currentUser = null;
+        renderUserArea();
+        // Opening the site as a guest mirrors the usual sign-in prompt:
+        // show it once, shortly after the page settles.
+        window.setTimeout(showSigninPrompt, 1600);
+      });
   }
 
   function renderUserArea() {
@@ -63,17 +131,60 @@
       .finally(function () { currentUser = null; renderUserArea(); goHome(); });
   }
 
+  // ---------- Search modes ----------
+  function setMode(mode, options) {
+    if (MODES.indexOf(mode) === -1) mode = 'web';
+    currentMode = mode;
+
+    searchTabs.forEach(function (tab) {
+      var active = tab.getAttribute('data-mode') === mode;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.setAttribute('tabindex', active ? '0' : '-1');
+    });
+
+    if (searchInput) {
+      searchInput.placeholder = MODE_PLACEHOLDERS[mode] || MODE_PLACEHOLDERS.web;
+    }
+
+    var opts = options || {};
+    if (opts.rerun && currentQuery) {
+      performSearch(currentQuery, 1, false, 'push');
+    }
+  }
+
+  searchTabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var mode = tab.getAttribute('data-mode') || 'web';
+      if (mode === currentMode) return;
+      setMode(mode, { rerun: true });
+    });
+
+    tab.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      var index = MODES.indexOf(tab.getAttribute('data-mode'));
+      var next = e.key === 'ArrowRight'
+        ? (index + 1) % MODES.length
+        : (index - 1 + MODES.length) % MODES.length;
+      searchTabs[next].focus();
+      setMode(MODES[next], { rerun: true });
+    });
+  });
+
   // ---------- Home ----------
   function goHome(pushHistory) {
+    document.body.classList.remove('searching');
     searchSection.classList.remove('compact');
     resultsSection.classList.add('hidden');
     resultsContainer.innerHTML = '';
     pagination.innerHTML = '';
-    if (globeSection) globeSection.style.display = '';
+    if (globeSection) globeSection.classList.add('hidden');
     searchInput.value = '';
     currentQuery = '';
     currentPage  = 1;
     searchSeq    = 0;
+    setMode('web');
 
     if (pushHistory !== false) {
       try { window.history.pushState({}, '', window.location.pathname); } catch (e) {}
@@ -135,11 +246,11 @@
       };
       recognition.onerror = function () {
         micBtn.classList.remove('listening');
-        searchInput.placeholder = 'Discover the exceptional...';
+        searchInput.placeholder = MODE_PLACEHOLDERS[currentMode] || MODE_PLACEHOLDERS.web;
       };
       recognition.onend = function () {
         micBtn.classList.remove('listening');
-        searchInput.placeholder = 'Discover the exceptional...';
+        searchInput.placeholder = MODE_PLACEHOLDERS[currentMode] || MODE_PLACEHOLDERS.web;
       };
 
       micBtn.addEventListener('click', function () {
@@ -156,28 +267,238 @@
     }
   }
 
+  // ---------- Camera / visual search ----------
+  if (cameraSearchBtn) {
+    cameraSearchBtn.addEventListener('click', function () {
+      window.open('https://lens.google.com/', '_blank', 'noopener,noreferrer');
+    });
+  }
+
+  // ---------- Slash-to-search ----------
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+    var el = document.activeElement;
+    var tag = el && el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (el && el.isContentEditable)) return;
+    e.preventDefault();
+    searchInput.focus();
+    searchInput.select();
+  });
+
+  // ---------- Shortcut apps ----------
+  function shortcutQuery() {
+    return (searchInput.value || currentQuery || '').trim();
+  }
+
+  function openExternal(url) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  document.querySelectorAll('.shortcut[data-shortcut]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var kind = btn.getAttribute('data-shortcut');
+      var q = shortcutQuery();
+
+      if (kind === 'youtube') {
+        openExternal(q
+          ? 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q)
+          : 'https://www.youtube.com/');
+        return;
+      }
+
+      if (kind === 'github') {
+        openExternal(q
+          ? 'https://github.com/search?q=' + encodeURIComponent(q) + '&type=repositories'
+          : 'https://github.com/');
+        return;
+      }
+
+      if (kind === 'wikipedia') {
+        openExternal(q
+          ? 'https://en.wikipedia.org/w/index.php?search=' + encodeURIComponent(q)
+          : 'https://en.wikipedia.org/');
+        return;
+      }
+
+      if (kind === 'news') {
+        var newsQuery = q ? q + ' news' : 'latest news';
+        setMode('web', { rerun: false });
+        searchInput.value = newsQuery;
+        doSearch(newsQuery);
+        return;
+      }
+
+      if (kind === 'maps') {
+        if (window.EightSearchMap && window.EightSearchMap.revealMap) {
+          window.EightSearchMap.revealMap();
+        }
+        return;
+      }
+
+      if (kind === 'weather') {
+        if (!navigator.geolocation || !window.EightSearchMap) {
+          if (window.EightSearchMap && window.EightSearchMap.revealMap) {
+            window.EightSearchMap.revealMap();
+          }
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            window.EightSearchMap.openWeatherAt(pos.coords.latitude, pos.coords.longitude);
+          },
+          function () {
+            if (window.EightSearchMap.revealMap) window.EightSearchMap.revealMap();
+          },
+          { timeout: 8000, maximumAge: 300000 }
+        );
+      }
+    });
+  });
+
+  // ---------- Custom shortcuts ----------
+  var SHORTCUT_KEY = '8search.shortcuts';
+
+  function readCustomShortcuts() {
+    try {
+      var parsed = JSON.parse(window.localStorage.getItem(SHORTCUT_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.filter(function (s) {
+        return s && s.url && s.label;
+      }) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveCustomShortcuts(list) {
+    try { window.localStorage.setItem(SHORTCUT_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+
+  function renderCustomShortcuts() {
+    if (!shortcutRow || !addShortcutBtn) return;
+    shortcutRow.querySelectorAll('.shortcut-custom').forEach(function (el) { el.remove(); });
+
+    readCustomShortcuts().forEach(function (entry) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shortcut shortcut-custom';
+      btn.setAttribute('aria-label', 'Open ' + entry.label);
+
+      var icon = document.createElement('span');
+      icon.className = 'shortcut-icon shortcut-icon-custom';
+      var letter = document.createElement('span');
+      letter.textContent = entry.label.charAt(0).toUpperCase();
+      icon.appendChild(letter);
+
+      var label = document.createElement('span');
+      label.className = 'shortcut-label';
+      label.textContent = entry.label;
+
+      btn.appendChild(icon);
+      btn.appendChild(label);
+      btn.addEventListener('click', function () { openExternal(entry.url); });
+      shortcutRow.insertBefore(btn, addShortcutBtn);
+    });
+  }
+
+  if (addShortcutBtn) {
+    addShortcutBtn.addEventListener('click', function () {
+      var raw = window.prompt('Paste a website URL to add it as a shortcut:');
+      if (raw === null) return;
+      raw = raw.trim();
+      if (!raw) return;
+
+      var url;
+      try {
+        url = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw);
+        if (!/^https?:$/.test(url.protocol)) throw new Error('bad protocol');
+      } catch (e) {
+        window.alert('That does not look like a valid website URL.');
+        return;
+      }
+
+      var label = url.hostname.replace(/^www\./, '').split('.')[0] || 'Shortcut';
+      label = label.charAt(0).toUpperCase() + label.slice(1);
+
+      var list = readCustomShortcuts();
+      list.push({ label: label, url: url.href });
+      saveCustomShortcuts(list);
+      renderCustomShortcuts();
+    });
+  }
+
+  // ---------- Footer information dialog ----------
+  var INFO_CONTENT = {
+    privacy: {
+      title: 'Privacy',
+      body: '<p>8search keeps your account email and a securely hashed password so you can sign in. Guest searches use a short-lived cookie to apply the free-search limit.</p>' +
+            '<p>Feedback you send is stored locally and emailed to the site owner so it can be read and answered. We do not sell your data or run advertising trackers.</p>'
+    },
+    terms: {
+      title: 'Terms',
+      body: '<p>Use 8search lawfully and responsibly. Search results, images, news, maps, and weather come from third-party sources and may change or be unavailable at any time.</p>' +
+            '<p>Accounts are personal. Do not use the service to break the law, attack the site, or scrape it at a rate that harms other users. The service is provided as is, without warranties.</p>'
+    },
+    about: {
+      title: 'About 8search',
+      body: '<p>8search is an answer-first search engine: quick answers, a Wikipedia card, videos, news, a live globe, and weather, all in one place.</p>' +
+            '<p>It is a small independent project built with FastAPI, vanilla JavaScript, Leaflet, and open data sources. The light interface is designed to stay out of the way of the answer.</p>'
+    }
+  };
+
+  function openInfo(key) {
+    var info = INFO_CONTENT[key];
+    if (!info || !infoDialog) return;
+    infoTitle.textContent = info.title;
+    infoBody.innerHTML = info.body;
+    if (typeof infoDialog.showModal === 'function') infoDialog.showModal();
+    else infoDialog.setAttribute('open', '');
+  }
+
+  document.querySelectorAll('.footer-link').forEach(function (link) {
+    link.addEventListener('click', function () {
+      openInfo(link.getAttribute('data-info'));
+    });
+  });
+
+  if (infoClose) infoClose.addEventListener('click', function () { infoDialog.close(); });
+  if (infoDialog) {
+    infoDialog.addEventListener('click', function (e) {
+      if (e.target === infoDialog) infoDialog.close();
+    });
+  }
+
+  // ---------- Close map ----------
+  if (closeGlobeBtn) {
+    closeGlobeBtn.addEventListener('click', function () {
+      if (globeSection) globeSection.classList.add('hidden');
+    });
+  }
+
   // ---------- URL / history ----------
   function readRoute() {
     try {
       var params = new URLSearchParams(window.location.search);
       var q = (params.get('q') || '').trim();
       var page = parseInt(params.get('page') || '1', 10);
+      var mode = params.get('mode') || 'web';
+      if (MODES.indexOf(mode) === -1) mode = 'web';
       if (!isFinite(page) || page < 1) page = 1;
       if (page > MAX_PAGE) page = MAX_PAGE;
-      return { q: q, page: page };
+      return { q: q, page: page, mode: mode };
     } catch (e) {
-      return { q: '', page: 1 };
+      return { q: '', page: 1, mode: 'web' };
     }
   }
 
-  function updateUrl(query, page, mode) {
+  function updateUrl(query, page, historyMode, searchMode) {
     try {
       var params = new URLSearchParams();
       params.set('q', query);
       if (page > 1) params.set('page', String(page));
+      if (searchMode && searchMode !== 'web') params.set('mode', searchMode);
       var url = window.location.pathname + '?' + params.toString();
-      var state = { q: query, page: page };
-      if (mode === 'push') window.history.pushState(state, '', url);
+      var state = { q: query, page: page, mode: searchMode || 'web' };
+      if (historyMode === 'push') window.history.pushState(state, '', url);
       else window.history.replaceState(state, '', url);
     } catch (e) {}
   }
@@ -194,13 +515,19 @@
 
   // ---------- Search ----------
   function performSearch(query, page, lucky, historyMode) {
+    if (currentMode === 'images' && !lucky) {
+      performImageSearch(query, page, historyMode);
+      return;
+    }
+
     currentQuery = query;
     currentPage  = page;
     var seq = ++searchSeq;
 
     // Switch to results layout
+    document.body.classList.add('searching');
     searchSection.classList.add('compact');
-    if (globeSection) globeSection.style.display = 'none';
+    if (globeSection) globeSection.classList.add('hidden');
     resultsSection.classList.remove('hidden');
 
     resultsContainer.innerHTML =
@@ -241,7 +568,7 @@
         }
 
         currentPage = data.page || page;
-        if (historyMode) updateUrl(query, currentPage, historyMode);
+        if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
         renderResults(data);
       })
       .catch(function (err) {
@@ -258,8 +585,58 @@
       });
   }
 
+  // ---------- Image search ----------
+  function performImageSearch(query, page, historyMode) {
+    currentQuery = query;
+    currentPage  = page;
+    var seq = ++searchSeq;
+
+    document.body.classList.add('searching');
+    searchSection.classList.add('compact');
+    if (globeSection) globeSection.classList.add('hidden');
+    resultsSection.classList.remove('hidden');
+
+    resultsContainer.innerHTML =
+      '<div class="search-loading"><div class="spinner"></div><p>Searching images…</p></div>';
+    pagination.innerHTML = '';
+    pagination.setAttribute('aria-busy', 'true');
+
+    fetch('/api/images?q=' + encodeURIComponent(query) + '&page=' + page,
+          { credentials: 'same-origin' })
+      .then(function (r) {
+        return r.json().then(function (data) {
+          if (!r.ok) {
+            var msg = data && data.detail ? data.detail : 'Image search is temporarily unavailable.';
+            throw new Error(msg);
+          }
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (seq !== searchSeq) return;
+        currentPage = data.page || page;
+        if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
+        renderImageResults(data);
+      })
+      .catch(function (err) {
+        if (seq !== searchSeq) return;
+        pagination.innerHTML = '';
+        resultsContainer.innerHTML =
+          '<div class="no-results"><div class="no-results-icon">⚠️</div>' +
+          '<h3>Images unavailable</h3><p>' +
+          esc(err && err.message ? err.message : 'Check your connection and try again.') +
+          '</p></div>';
+      })
+      .finally(function () {
+        if (seq === searchSeq) pagination.setAttribute('aria-busy', 'false');
+      });
+  }
+
   // ---------- Render results ----------
   function renderResults(data) {
+    if (currentMode === 'ai') { renderAIResults(data); return; }
+    if (currentMode === 'code') { renderCodeResults(data); return; }
+
     var results = data.results || [];
     var news    = data.news    || [];
     var answer  = data.answer  || null;
@@ -311,6 +688,151 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     renderPagination(page, data);
+  }
+
+  function renderAIResults(data) {
+    var results = data.results || [];
+    var answer  = data.answer || null;
+    var wiki    = data.wikipedia || null;
+    var videos  = data.videos || [];
+    var page    = data.page || currentPage || 1;
+
+    if (!results.length && !answer && !wiki && !videos.length) {
+      resultsContainer.innerHTML =
+        '<div class="no-results"><div class="no-results-icon">🔍</div>' +
+          '<h3>No answer found</h3><p>Try asking a more specific question.</p></div>';
+      pagination.innerHTML = '';
+      return;
+    }
+
+    var html =
+      '<div class="results-info">AI answer for "<strong>' + esc(currentQuery) +
+      '</strong>"</div>';
+
+    if (answer) {
+      html += buildAnswerCard(answer);
+    } else {
+      html +=
+        '<div class="ai-empty">' +
+          '<span class="ai-empty-mark">8</span>' +
+          '<div><h3>No instant answer for this one</h3>' +
+          '<p>Here are the most useful sources we found instead.</p></div>' +
+        '</div>';
+    }
+
+    if (wiki) html += buildWikiCard(wiki);
+    if (videos.length && page === 1) html += buildVideosSection(videos.slice(0, 3));
+
+    if (results.length) {
+      html += '<div class="ai-sources"><div class="ai-sources-head">Sources</div>';
+      results.slice(0, 5).forEach(function (r) { html += buildResultCard(r); });
+      html += '</div>';
+    }
+
+    html +=
+      '<button type="button" class="ai-all-btn" id="aiAllBtn">' +
+        'See all web results' +
+      '</button>';
+
+    resultsContainer.innerHTML = html;
+    wireAnswerToggle();
+
+    var aiAllBtn = document.getElementById('aiAllBtn');
+    if (aiAllBtn) {
+      aiAllBtn.addEventListener('click', function () {
+        setMode('web', { rerun: true });
+      });
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    renderPagination(page, data);
+  }
+
+  function renderCodeResults(data) {
+    var results = data.results || [];
+    var page    = data.page || currentPage || 1;
+
+    if (!results.length) {
+      resultsContainer.innerHTML =
+        '<div class="no-results"><div class="no-results-icon">⌘</div>' +
+          '<h3>No code results found</h3><p>Try a library, language, or error message.</p></div>';
+      pagination.innerHTML = '';
+      return;
+    }
+
+    var q = encodeURIComponent(currentQuery);
+    var html =
+      '<div class="results-info">Code results for "<strong>' + esc(currentQuery) +
+      '</strong>"</div>' +
+      '<div class="code-banner">' +
+        '<div><span class="code-banner-kicker">Developer search</span>' +
+        '<strong>Keep digging in the right place</strong></div>' +
+        '<div class="code-banner-links">' +
+          '<a href="https://github.com/search?q=' + escAttr(q) +
+            '&type=repositories" target="_blank" rel="noopener">GitHub</a>' +
+          '<a href="https://stackoverflow.com/search?q=' + escAttr(q) +
+            '" target="_blank" rel="noopener">Stack Overflow</a>' +
+        '</div>' +
+      '</div>';
+
+    results.forEach(function (r) { html += buildResultCard(r); });
+
+    resultsContainer.innerHTML = html;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    renderPagination(page, data);
+  }
+
+  function renderImageResults(data) {
+    var images = data.images || [];
+    var page   = data.page || currentPage || 1;
+
+    if (!images.length) {
+      resultsContainer.innerHTML =
+        '<div class="no-results"><div class="no-results-icon">🖼️</div>' +
+          '<h3>No images found</h3><p>Try a different, more visual search.</p>' +
+          '<button type="button" class="link-btn" id="imagesWebBtn">Search the web instead</button>' +
+        '</div>';
+      pagination.innerHTML = '';
+      var imagesWebBtn = document.getElementById('imagesWebBtn');
+      if (imagesWebBtn) {
+        imagesWebBtn.addEventListener('click', function () {
+          setMode('web', { rerun: true });
+        });
+      }
+      return;
+    }
+
+    var html =
+      '<div class="results-info">Images for "<strong>' + esc(currentQuery) +
+      '</strong>"</div><div class="image-grid">';
+
+    images.forEach(function (img) {
+      var target = img.url || img.image || '';
+      var domain = target ? domainOf(target) : '';
+      var title  = img.title || domain || 'Image result';
+      html +=
+        '<a class="image-card" href="' + escAttr(target) + '" target="_blank" rel="noopener" ' +
+           'title="' + escAttr(title) + '">' +
+          '<span class="image-thumb">' +
+            '<img src="' + escAttr(img.thumbnail || img.image) + '" alt="' +
+              escAttr(title) + '" loading="lazy" ' +
+              'onerror="this.parentElement.classList.add(\'is-empty\'); this.remove()">' +
+          '</span>' +
+          '<span class="image-card-foot">' +
+            '<span class="image-card-title">' + esc(title) + '</span>' +
+            (domain ? '<span class="image-card-source">' + esc(domain) + '</span>' : '') +
+          '</span>' +
+        '</a>';
+    });
+
+    html += '</div>';
+    resultsContainer.innerHTML = html;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    renderPagination(page, {
+      has_more: !!data.has_more,
+      max_page: 5
+    });
   }
 
   function buildAnswerCard(a) {
@@ -502,6 +1024,75 @@
     loginBanner.classList.add('hidden');
   });
 
+  // ---------- Feedback ----------
+  function setFeedbackStatus(text, kind) {
+    if (!feedbackStatus) return;
+    feedbackStatus.textContent = text;
+    feedbackStatus.className = 'feedback-status' + (kind ? ' ' + kind : '');
+  }
+
+  if (feedbackForm) {
+    feedbackForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (feedbackSubmit.disabled) return;
+
+      var name = feedbackName.value.trim();
+      var email = feedbackEmail.value.trim();
+      var message = feedbackMessage.value.trim();
+
+      if (message.length < 3) {
+        setFeedbackStatus('Please write a message before sending.', 'error');
+        feedbackMessage.focus();
+        return;
+      }
+
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        setFeedbackStatus('Please enter a valid email address.', 'error');
+        feedbackEmail.focus();
+        return;
+      }
+
+      feedbackSubmit.disabled = true;
+      feedbackSubmit.textContent = 'Sending…';
+      setFeedbackStatus('Sending your feedback…', '');
+
+      fetch('/api/feedback', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, email: email, message: message })
+      })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (data) {
+            if (!r.ok) {
+              var detail = data && data.detail;
+              var err = new Error(typeof detail === 'string'
+                ? detail
+                : 'Something went wrong. Please try again.');
+              err.status = r.status;
+              throw err;
+            }
+            return data;
+          });
+        })
+        .then(function (data) {
+          feedbackForm.reset();
+          if (feedbackEmail && currentUser) feedbackEmail.value = currentUser;
+          setFeedbackStatus(
+            (data && data.message) || 'Thank you! Your feedback has been sent.',
+            'success'
+          );
+        })
+        .catch(function (err) {
+          setFeedbackStatus(err.message || 'Something went wrong. Please try again.', 'error');
+        })
+        .then(function () {
+          feedbackSubmit.disabled = false;
+          feedbackSubmit.textContent = 'Send feedback';
+        });
+    });
+  }
+
   // ---------- Helpers ----------
   function domainOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
@@ -545,17 +1136,24 @@
   window.addEventListener('popstate', function () {
     var route = readRoute();
     if (!route.q) { goHome(false); return; }
+    setMode(route.mode, { rerun: false });
     searchInput.value = route.q;
     performSearch(route.q, route.page, false, null);
   });
 
   checkAuth();
+  setMode('web');
+  renderCustomShortcuts();
 
   var initialRoute = readRoute();
   if (initialRoute.q) {
+    setMode(initialRoute.mode, { rerun: false });
     searchInput.value = initialRoute.q;
     performSearch(initialRoute.q, initialRoute.page, false, null);
   }
 
-  window.EightSearch = { showLoginBanner: showLoginBanner };
+  window.EightSearch = {
+    showLoginBanner: showLoginBanner,
+    setMode: setMode
+  };
 })();

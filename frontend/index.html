@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#141416">
+  <meta name="theme-color" content="#f5f2ec">
   <title>8search</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261113-5">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=20261114-7">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
-<body>
+<body class="landing-page">
   <!-- Top Bar -->
   <header class="top-bar">
     <a href="/" class="top-bar-logo"><span class="logo-8">8</span>search</a>
@@ -26,36 +26,54 @@
   <!-- Main Search Section -->
   <main id="searchSection" class="search-section">
     <h1 class="main-logo"><span class="logo-8">8</span><span class="logo-text">search</span></h1>
+
     <form id="searchForm" class="search-form" autocomplete="off">
       <div class="search-bar">
-        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="7"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
-        <input type="text" id="searchInput" class="search-input" placeholder="Discover the exceptional..." aria-label="Search" autofocus>
+
+        <input type="text" id="searchInput" class="search-input"
+               placeholder="Search anything or type a calculation…"
+               aria-label="Search" autofocus>
+
+        <kbd class="search-slash" aria-hidden="true">/</kbd>
+
         <button type="button" id="voiceSearchBtn" class="search-mic-btn" aria-label="Search by voice" title="Search by voice">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
             <line x1="12" y1="19" x2="12" y2="23"></line>
             <line x1="8" y1="23" x2="16" y2="23"></line>
           </svg>
         </button>
+
+        <button type="button" id="cameraSearchBtn" class="search-camera-btn" aria-label="Search with an image" title="Search with Google Lens">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path>
+            <circle cx="12" cy="13" r="3.4"></circle>
+          </svg>
+        </button>
+
         <button type="submit" class="search-submit" aria-label="Search" title="Search">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-            <polyline points="12 5 19 12 12 19"></polyline>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
           </svg>
         </button>
       </div>
 
-      <!-- Landing Category Pills (matching design) -->
-      <div class="landing-pills" id="landingPills">
-        <button type="button" class="landing-pill" data-query="Insights">Insights</button>
-        <button type="button" class="landing-pill" data-query="Visuals">Visuals</button>
-        <button type="button" class="landing-pill" data-query="Market">Market</button>
-        <button type="button" class="landing-pill" data-query="Curated">Curated</button>
-        <button type="button" class="landing-pill" data-query="Directory">Directory</button>
+      <!-- Search modes -->
+      <div class="search-tabs" role="tablist" aria-label="Search mode">
+        <button type="button" class="search-tab active" role="tab"
+                aria-selected="true" data-mode="web">Web</button>
+        <button type="button" class="search-tab" role="tab"
+                aria-selected="false" data-mode="ai">AI Answer</button>
+        <button type="button" class="search-tab" role="tab"
+                aria-selected="false" data-mode="images">Images</button>
+        <button type="button" class="search-tab" role="tab"
+                aria-selected="false" data-mode="code">Code</button>
       </div>
 
       <div class="search-buttons visually-hidden">
@@ -63,10 +81,87 @@
         <button type="button" id="luckyBtn" class="search-btn">I'm Feeling Lucky</button>
       </div>
     </form>
+
+    <!-- Shortcut apps -->
+    <nav class="shortcut-row" id="shortcutRow" aria-label="Quick shortcuts">
+      <button type="button" class="shortcut" data-shortcut="youtube" aria-label="Search YouTube">
+        <span class="shortcut-icon shortcut-icon-youtube">
+          <svg viewBox="0 0 24 24" width="25" height="25" aria-hidden="true">
+            <rect x="2" y="5" width="20" height="14" rx="4.4" fill="currentColor"></rect>
+            <path d="M10 9.2v5.6l5-2.8z" fill="#fff"></path>
+          </svg>
+        </span>
+        <span class="shortcut-label">YouTube</span>
+      </button>
+
+      <button type="button" class="shortcut" data-shortcut="github" aria-label="Search GitHub">
+        <span class="shortcut-icon shortcut-icon-github">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .5C5.73.5.75 5.48.75 11.75c0 4.94 3.2 9.13 7.65 10.61.56.1.77-.24.77-.54v-1.9c-3.12.68-3.78-1.5-3.78-1.5-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.69.08-.69 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.93.1-.73.39-1.22.71-1.5-2.49-.28-5.11-1.25-5.11-5.55 0-1.23.44-2.23 1.16-3.02-.12-.28-.5-1.43.11-2.98 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.61 1.55.23 2.7.11 2.98.72.79 1.16 1.79 1.16 3.02 0 4.31-2.62 5.27-5.12 5.54.4.35.76 1.04.76 2.1v3.12c0 .3.2.65.78.54a11.26 11.26 0 0 0 7.64-10.61C23.25 5.48 18.27.5 12 .5Z"></path>
+          </svg>
+        </span>
+        <span class="shortcut-label">GitHub</span>
+      </button>
+
+      <button type="button" class="shortcut" data-shortcut="wikipedia" aria-label="Search Wikipedia">
+        <span class="shortcut-icon shortcut-icon-wikipedia">
+          <span class="shortcut-glyph">W</span>
+        </span>
+        <span class="shortcut-label">Wikipedia</span>
+      </button>
+
+      <button type="button" class="shortcut" data-shortcut="news" aria-label="Search the news">
+        <span class="shortcut-icon shortcut-icon-news">
+          <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 4h12v15H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+            <path d="M17 8h2a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5"></path>
+            <path d="M7 8h6M7 12h6M7 16h3"></path>
+          </svg>
+        </span>
+        <span class="shortcut-label">News</span>
+      </button>
+
+      <button type="button" class="shortcut" data-shortcut="maps" aria-label="Open the map">
+        <span class="shortcut-icon shortcut-icon-maps">
+          <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0z"></path>
+            <circle cx="12" cy="10" r="2.6"></circle>
+          </svg>
+        </span>
+        <span class="shortcut-label">Maps</span>
+      </button>
+
+      <button type="button" class="shortcut" data-shortcut="weather" aria-label="Show weather">
+        <span class="shortcut-icon shortcut-icon-weather">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8.2" cy="8.2" r="3.1"></circle>
+            <path d="M8.2 1.8v1.4M8.2 13.2v1.4M1.8 8.2h1.4M13.2 8.2h1.4M3.7 3.7l1 1M11.7 11.7l1 1M12.7 3.7l-1 1M4.7 11.7l-1 1"></path>
+            <path d="M8.5 19h9a3 3 0 0 0 .2-6 4.4 4.4 0 0 0-8.4-1.2A3.6 3.6 0 0 0 8.5 19z"></path>
+          </svg>
+        </span>
+        <span class="shortcut-label">Weather</span>
+      </button>
+
+      <button type="button" class="shortcut shortcut-add" id="addShortcutBtn" aria-label="Add a shortcut">
+        <span class="shortcut-icon shortcut-icon-add">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"></path>
+          </svg>
+        </span>
+        <span class="shortcut-label">Add New</span>
+      </button>
+    </nav>
   </main>
 
-  <!-- Globe / Map Section -->
-  <section class="globe-section">
+  <!-- Globe / Map Section (revealed from the Maps shortcut) -->
+  <section id="globeSection" class="globe-section hidden">
+    <div class="globe-head">
+      <div>
+        <p class="globe-kicker">Explore the world</p>
+        <h2 class="globe-title">Live globe &amp; weather</h2>
+      </div>
+      <button type="button" id="closeGlobeBtn" class="globe-close" aria-label="Close map">&times;</button>
+    </div>
     <div class="globe-controls">
       <button id="btnGlobeFlat" class="globe-ctrl-btn" title="Toggle Globe / Flat">Globe / Flat</button>
       <button id="btnMapSat" class="globe-ctrl-btn" title="Toggle Map / Satellite">Map / Satellite</button>
@@ -81,9 +176,53 @@
     <div id="pagination" class="pagination" role="navigation" aria-label="Search result pages"></div>
   </section>
 
+  <!-- Feedback -->
+  <section id="feedbackSection" class="feedback-section" aria-labelledby="feedbackTitle">
+    <div class="feedback-card">
+      <p class="feedback-kicker">We're listening</p>
+      <h2 id="feedbackTitle" class="feedback-title">Share your feedback</h2>
+      <p class="feedback-copy">
+        Found a bug, have an idea, or just want to say hello? Send us a note — it goes straight to our inbox.
+      </p>
+
+      <form id="feedbackForm" class="feedback-form" novalidate>
+        <div class="feedback-row">
+          <div class="feedback-field">
+            <label class="feedback-label" for="feedbackName">Name <em>(optional)</em></label>
+            <input class="feedback-input" type="text" id="feedbackName" name="name"
+                   maxlength="100" autocomplete="name" placeholder="Your name">
+          </div>
+          <div class="feedback-field">
+            <label class="feedback-label" for="feedbackEmail">Email <em>(optional)</em></label>
+            <input class="feedback-input" type="email" id="feedbackEmail" name="email"
+                   maxlength="254" autocomplete="email" placeholder="you@example.com">
+          </div>
+        </div>
+
+        <div class="feedback-field">
+          <label class="feedback-label" for="feedbackMessage">Message</label>
+          <textarea class="feedback-input feedback-textarea" id="feedbackMessage" name="message"
+                    rows="4" maxlength="4000" required
+                    placeholder="Tell us what's on your mind…"></textarea>
+        </div>
+
+        <div class="feedback-actions">
+          <button type="submit" id="feedbackSubmit" class="feedback-submit">Send feedback</button>
+          <p id="feedbackStatus" class="feedback-status" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </div>
+  </section>
+
   <footer class="site-footer">
-    <p><strong>8search</strong> — search the web, explore the world.</p>
-    <p>Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Maps by Esri &amp; OpenStreetMap</p>
+    <nav class="footer-links" aria-label="Site information">
+      <button type="button" class="footer-link" data-info="privacy">Privacy</button>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <button type="button" class="footer-link" data-info="terms">Terms</button>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <button type="button" class="footer-link" data-info="about">About</button>
+    </nav>
+    <p class="footer-note">Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Maps by Esri &amp; OpenStreetMap</p>
   </footer>
 
   <!-- Weather Panel -->
@@ -116,8 +255,25 @@
     </div>
   </div>
 
+  <!-- Footer information dialog -->
+  <dialog id="infoDialog" class="info-dialog" aria-labelledby="infoTitle">
+    <button type="button" class="info-close" id="infoClose" aria-label="Close">&times;</button>
+    <h2 id="infoTitle" class="info-title"></h2>
+    <div id="infoBody" class="info-body"></div>
+  </dialog>
+
+  <!-- Gemini shortcut -->
+  <a class="gemini-fab" href="https://gemini.google.com/app"
+     target="_blank" rel="noopener noreferrer"
+     aria-label="Open Gemini in a new tab" title="Open Gemini in a new tab">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+      <path d="M12 2.2c.5 4.9 2.1 7.1 8 8.3v2.2c-5.9 1.2-7.5 3.4-8 8.3h-2.2c-.5-4.9-2.1-7.1-8-8.3v-2.2c5.9-1.2 7.5-3.4 8-8.3H12z"></path>
+    </svg>
+    <span>Ask Gemini</span>
+  </a>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js?v=20261113-3"></script>
-  <script src="map.js?v=20261112-3"></script>
+  <script src="app.js?v=20261114-7"></script>
+  <script src="map.js?v=20261114-7"></script>
 </body>
 </html>

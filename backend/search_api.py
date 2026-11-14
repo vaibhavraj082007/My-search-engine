@@ -59,7 +59,10 @@ ANSWER_SOURCE_TIMEOUT = float(os.getenv("ANSWER_SOURCE_TIMEOUT", "4"))
 VIDEO_TIMEOUT = float(os.getenv("VIDEO_TIMEOUT", "6"))
 DDGS_CONCURRENCY = max(1, int(os.getenv("DDGS_CONCURRENCY", "6")))
 DDGS_TIMEOUT = float(os.getenv("DDGS_TIMEOUT", "4"))
+DDGS_IMAGE_TIMEOUT = float(os.getenv("DDGS_IMAGE_TIMEOUT", "8"))
 DDGS_RETRY_DELAY = float(os.getenv("DDGS_RETRY_DELAY", "0.4"))
+IMAGE_RESULTS_PER_PAGE = max(12, min(48, int(os.getenv("IMAGE_RESULTS_PER_PAGE", "30"))))
+IMAGE_CACHE_TTL = int(os.getenv("IMAGE_CACHE_TTL", "900"))
 UPSTREAM_MIN_RESULTS = max(1, int(os.getenv("UPSTREAM_MIN_RESULTS", "5")))
 DISABLE_LOCAL_INDEX = os.getenv("DISABLE_LOCAL_INDEX", "0") == "1"
 
@@ -85,7 +88,7 @@ def _get_ddgs():
         return DDGS()
 
 
-async def _run_ddgs(fn, *args):
+async def _run_ddgs(fn, *args, timeout: float | None = None):
     """Run a blocking DDGS call with a hard thread/concurrency bound.
 
     DDGS has no async API and no server-side timeout. Without these guards a
@@ -94,7 +97,9 @@ async def _run_ddgs(fn, *args):
     """
     try:
         async with _ddgs_semaphore:
-            return await asyncio.wait_for(asyncio.to_thread(fn, *args), DDGS_TIMEOUT)
+            return await asyncio.wait_for(
+                asyncio.to_thread(fn, *args), timeout or DDGS_TIMEOUT
+            )
     except Exception:
         return []
 
@@ -121,6 +126,52 @@ def _ddgs_web_search(
         # DDGS raises on rate limits and empty result sets; this is expected
         # under load and already handled by the caller's fallbacks.
         return []
+
+
+# ── Image search ─────────────────────────────────────────────────────────
+
+def _ddgs_image_search(
+    query: str, max_results: int = 30, page: int = 1
+) -> list[dict]:
+    """Fetch image results through the ddgs library (blocking)."""
+    try:
+        results = []
+        with _get_ddgs() as ddgs:
+            for r in ddgs.images(
+                query, max_results=max_results, page=page, safesearch="moderate"
+            ):
+                image = (r.get("image") or "").strip()
+                if not image:
+                    continue
+                results.append({
+                    "image":     image,
+                    "thumbnail": (r.get("thumbnail") or image).strip(),
+                    "title":     (r.get("title") or "").strip(),
+                    "url":       (r.get("url") or "").strip(),
+                    "width":     r.get("width") or "",
+                    "height":    r.get("height") or "",
+                })
+        return results
+    except Exception:
+        # Rate limits and empty result sets are expected under load.
+        return []
+
+
+async def _collect_images(query: str, page: int) -> dict:
+    images = await _run_ddgs(
+        _ddgs_image_search,
+        query,
+        IMAGE_RESULTS_PER_PAGE,
+        page,
+        timeout=DDGS_IMAGE_TIMEOUT,
+    )
+    return {
+        "images":   images,
+        "query":    query,
+        "page":     page,
+        "per_page": IMAGE_RESULTS_PER_PAGE,
+        "has_more": len(images) >= IMAGE_RESULTS_PER_PAGE,
+    }
 
 
 async def _html_web_search(query: str, max_results: int = 15, page: int = 1) -> list[dict]:
@@ -789,6 +840,39 @@ async def search(
         raise HTTPException(
             status_code=502,
             detail="Search is temporarily unavailable. Please try again.",
+        )
+
+    response.headers["X-Cache"] = "HIT" if cache_hit else "MISS"
+    return payload
+
+
+@router.get("/api/images")
+async def image_search(
+    response: Response,
+    q: str = Query("", min_length=0, max_length=400),
+    page: int = Query(1, ge=1, le=5),
+):
+    """Image results for the Images tab. Cached and bounded like web search."""
+    query = q.strip()
+    if not query:
+        return {
+            "images": [], "query": "", "page": 1,
+            "per_page": IMAGE_RESULTS_PER_PAGE, "has_more": False,
+        }
+
+    try:
+        payload, cache_hit = await cache.get_or_set(
+            f"8s:images:v1:{page}:{IMAGE_RESULTS_PER_PAGE}:{_normalize_query(query)}",
+            lambda: _collect_images(query, page),
+            ttl=IMAGE_CACHE_TTL,
+            should_cache=lambda p: bool(p.get("images")),
+            negative_ttl=SEARCH_EMPTY_CACHE_TTL,
+        )
+    except Exception:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=502,
+            detail="Image search is temporarily unavailable. Please try again.",
         )
 
     response.headers["X-Cache"] = "HIT" if cache_hit else "MISS"

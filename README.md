@@ -238,11 +238,12 @@ When you click **any point** on the globe:
 | Sign up / sign in | Email + password (8+ characters) |
 | Password storage | bcrypt hash only (never plain text) |
 | Password reset | Single-use emailed link, valid for 30 minutes |
-| Login alerts | Email sent after every successful sign-in |
+| Login alerts | Formal security email after every successful sign-in |
+| Feedback | Form at the bottom of the site emails submissions to the owner |
 | Data location | Local SQLite in `data/` |
 | Session | HttpOnly cookie (30 days) |
 
-### ✉️ Email setup (password reset & login alerts)
+### ✉️ Email setup (password reset, login alerts & feedback)
 
 Copy `backend/.env.example` to `backend/.env` and fill in your SMTP details:
 
@@ -255,8 +256,13 @@ Copy `backend/.env.example` to `backend/.env` and fill in your SMTP details:
 | `SMTP_FROM` | `"8search <you@gmail.com>"` | Sender shown in the email |
 | `SMTP_SECURITY` | `starttls` | `starttls`, `ssl`, or `none` |
 | `APP_BASE_URL` | `http://localhost:8000` | Used to build reset links |
+| `FEEDBACK_EMAIL` | `you@gmail.com` | Inbox that receives feedback submissions |
+
+> `SMTP_USER` must be the Google account that created the App Password. `FEEDBACK_EMAIL` can be a different address if you want feedback delivered somewhere else.
 
 > **Local development:** if SMTP is not configured, every email — including the password-reset link — is printed to the server console. Password resets still work end-to-end.
+
+> **Feedback:** submissions from the form at the bottom of the homepage are saved to `data/feedback.db` and emailed to `FEEDBACK_EMAIL`. Each IP address has a 30-second cooldown.
 
 Accounts unlock **unlimited searches** and will power future features like search history, bookmarks, and personalized globe settings.
 
@@ -278,6 +284,7 @@ Key endpoints:
 | `/api/me` | GET | Current user info |
 | `/api/forgot-password` | POST | Email a password-reset link |
 | `/api/reset-password` | POST | Set a new password with a reset token |
+| `/api/feedback` | POST | Store feedback and email it to `FEEDBACK_EMAIL` |
 | `/health` | GET | Liveness probe for load balancers |
 | `/ready` | GET | Readiness probe (reports cache backend) |
 

@@ -4,4 +4,7 @@ venv/
 backend/data/
 .DS_Store
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 .env

@@ -9,7 +9,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, searchdb
+from . import auth, feedback, searchdb
 from .answers import close_http_client
 from .cache import cache
 from .ratelimit import limiter
@@ -26,6 +26,7 @@ STATIC_CACHE_EXTENSIONS = {
 async def lifespan(app: FastAPI):
     """Initialize databases and shared runtime resources on startup."""
     auth.init_db()
+    feedback.init_db()
     searchdb.init_db()
     await cache.start()
     limiter.redis = cache.redis
@@ -108,6 +109,7 @@ async def ready():
 
 # Include API routers
 app.include_router(auth.router)
+app.include_router(feedback.router)
 app.include_router(search_router)
 app.include_router(weather_router)
 

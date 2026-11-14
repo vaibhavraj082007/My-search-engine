@@ -67,18 +67,58 @@
   );
 
   // ---------- Initialize map ----------
-  var map = L.map('map', {
-    center: [20, 0],
-    zoom: 2,
-    zoomControl: true,
-    worldCopyJump: true,
-    layers: [satelliteTiles]
-  });
-
+  var map = null;
   var isSatellite = true;
   var isGlobe = false;
   var earthquakesVisible = false;
   var earthquakeLayer = null;
+
+  function ensureMap() {
+    if (map) return map;
+    if (!window.L) return null;
+
+    var container = document.getElementById('map');
+    if (!container) return null;
+
+    map = L.map('map', {
+      center: [20, 0],
+      zoom: 2,
+      zoomControl: true,
+      worldCopyJump: true,
+      layers: [satelliteTiles]
+    });
+
+    // Map click → weather
+    map.on('click', function (e) {
+      openWeatherPanel(e.latlng.lat, e.latlng.lng);
+    });
+
+    return map;
+  }
+
+  function revealMap() {
+    var section = document.getElementById('globeSection');
+    if (section) section.classList.remove('hidden');
+
+    // The section is visible synchronously, so the container can be measured
+    // right away. Do not wait for requestAnimationFrame here: background tabs
+    // pause it, which would leave the map blank after a shortcut click.
+    ensureMap();
+
+    window.setTimeout(function () {
+      if (map) map.invalidateSize();
+      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }
+
+  function hideMap() {
+    var section = document.getElementById('globeSection');
+    if (section) section.classList.add('hidden');
+  }
+
+  function openWeatherAt(lat, lon) {
+    openWeatherPanel(lat, lon);
+  }
 
   // ---------- Weather Panel ----------
   var weatherPanel = document.getElementById('weatherPanel');
@@ -217,16 +257,12 @@
     }
   }
 
-  // ---------- Map click → weather ----------
-  map.on('click', function (e) {
-    openWeatherPanel(e.latlng.lat, e.latlng.lng);
-  });
-
   // ---------- Globe / Flat toggle ----------
   var btnGlobeFlat = document.getElementById('btnGlobeFlat');
   var mapContainer = document.getElementById('map');
 
   btnGlobeFlat.addEventListener('click', function () {
+    if (!ensureMap()) return;
     isGlobe = !isGlobe;
     this.classList.toggle('active', isGlobe);
 
@@ -247,6 +283,7 @@
   var btnMapSat = document.getElementById('btnMapSat');
 
   btnMapSat.addEventListener('click', function () {
+    if (!ensureMap()) return;
     isSatellite = !isSatellite;
     this.classList.toggle('active', !isSatellite);
 
@@ -263,6 +300,7 @@
   var btnEarthquakes = document.getElementById('btnEarthquakes');
 
   btnEarthquakes.addEventListener('click', function () {
+    if (!ensureMap()) return;
     earthquakesVisible = !earthquakesVisible;
     this.classList.toggle('active', earthquakesVisible);
 
@@ -277,6 +315,7 @@
   });
 
   function loadEarthquakes() {
+    if (!ensureMap()) return;
     fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson')
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -316,6 +355,17 @@
         }
       })
       .catch(function () { /* silently ignore */ });
+  }
+
+  // ---------- Public API ----------
+  window.EightSearchMap = {
+    revealMap: revealMap,
+    hideMap: hideMap,
+    openWeatherAt: openWeatherAt
+  };
+
+  if (window.location.hash === '#map') {
+    window.setTimeout(revealMap, 80);
   }
 
   // ---------- Helpers ----------
