@@ -84,6 +84,19 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _request_context(request: Request) -> tuple[str, str, str]:
+    """Return (time, IP address, device) for account security emails."""
+    if os.getenv("TRUST_PROXY", "0") == "1":
+        forwarded = request.headers.get("x-forwarded-for", "")
+        ip_address = forwarded.split(",")[0].strip() if forwarded else ""
+    else:
+        ip_address = ""
+    if not ip_address:
+        ip_address = request.client.host if request.client else "unknown"
+    device = (request.headers.get("user-agent") or "Unknown device")[:300]
+    return _now().strftime("%Y-%m-%d %H:%M:%S UTC"), ip_address, device
+
+
 def _validate_email(email: str) -> str:
     """Normalise and validate an email address."""
     email = email.strip().lower()
@@ -164,7 +177,11 @@ class ResetPasswordRequest(BaseModel):
 # ── Routes ──────────────────────────────────────────────────────────────────
 
 @router.post("/api/signup")
-def signup(body: AuthRequest):
+def signup(
+    body: AuthRequest,
+    request: Request,
+    background: BackgroundTasks,
+):
     email = _validate_email(body.email)
     _validate_password(body.password)
 
@@ -182,6 +199,17 @@ def signup(body: AuthRequest):
         conn.close()
         raise HTTPException(status_code=409, detail="An account with this email already exists")
     conn.close()
+
+    # Send the welcome note after the response; delivery failures never block
+    # account creation.
+    when, ip_address, device = _request_context(request)
+    background.add_task(
+        emailer.send_welcome_email,
+        email,
+        when,
+        ip_address,
+        device,
+    )
     return {"message": "Account created"}
 
 
@@ -223,25 +251,56 @@ def login(
     )
 
     # Send the sign-in alert after the response; failures never block login.
+    when, ip_address, device = _request_context(request)
     background.add_task(
         emailer.send_login_notice,
         email,
-        _now().strftime("%Y-%m-%d %H:%M:%S UTC"),
-        request.client.host if request.client else "unknown",
-        request.headers.get("user-agent", "Unknown device"),
+        when,
+        ip_address,
+        device,
     )
 
     return {"email": email}
 
 
 @router.post("/api/logout")
-def logout(response: Response, session_token: str | None = Cookie(default=None)):
+def logout(
+    request: Request,
+    response: Response,
+    background: BackgroundTasks,
+    session_token: str | None = Cookie(default=None),
+):
+    email = None
     if session_token:
         conn = _get_db()
+        row = conn.execute(
+            """
+            SELECT u.email
+            FROM sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.token = ?
+            """,
+            (session_token,),
+        ).fetchone()
+        if row is not None:
+            email = row["email"]
         conn.execute("DELETE FROM sessions WHERE token = ?", (session_token,))
         conn.commit()
         conn.close()
+
     response.delete_cookie(key="session_token", path="/")
+
+    # Send the sign-out confirmation after the response; failures never block
+    # logout.
+    if email:
+        when, ip_address, device = _request_context(request)
+        background.add_task(
+            emailer.send_logout_notice,
+            email,
+            when,
+            ip_address,
+            device,
+        )
     return {"message": "Logged out"}
 
 

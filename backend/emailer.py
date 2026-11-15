@@ -23,10 +23,19 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 from pathlib import Path
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
 logger = logging.getLogger("8search.email")
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(
+        logging.Formatter("[8search email] %(levelname)s: %(message)s")
+    )
+    logger.addHandler(_handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 
 _ROOT = Path(__file__).resolve().parent.parent
 for _env_file in (_ROOT / ".env", _ROOT / "backend" / ".env"):
@@ -50,21 +59,45 @@ def _header_safe(value: str, limit: int = 200) -> str:
 
 
 def _smtp_config() -> dict:
+    """Read SMTP settings without ever raising on malformed values."""
+    try:
+        port = int(os.getenv("SMTP_PORT", "587") or "587")
+    except (TypeError, ValueError):
+        logger.warning("Invalid SMTP_PORT value; falling back to 587")
+        port = 587
+    if not 1 <= port <= 65535:
+        logger.warning("SMTP_PORT out of range; falling back to 587")
+        port = 587
+
     user = os.getenv("SMTP_USER", "").strip()
+    security = os.getenv("SMTP_SECURITY", "starttls").strip().lower()
+    if security not in {"starttls", "ssl", "none"}:
+        logger.warning("Unknown SMTP_SECURITY %r; using starttls", security)
+        security = "starttls"
+
     return {
         "host": os.getenv("SMTP_HOST", "").strip(),
-        "port": int(os.getenv("SMTP_PORT", "587")),
+        "port": port,
         "user": user,
         "password": os.getenv("SMTP_PASSWORD", "").strip(),
         "sender": os.getenv("SMTP_FROM", "").strip() or user,
-        "security": os.getenv("SMTP_SECURITY", "starttls").strip().lower(),
+        "security": security,
     }
 
 
 def is_configured() -> bool:
     """True when enough SMTP settings exist to attempt delivery."""
-    cfg = _smtp_config()
-    return bool(cfg["host"] and cfg["user"] and cfg["password"] and cfg["sender"])
+    try:
+        cfg = _smtp_config()
+        return bool(cfg["host"] and cfg["user"] and cfg["password"] and cfg["sender"])
+    except Exception:
+        logger.exception("Could not read SMTP configuration")
+        return False
+
+
+def _support_mailto(subject: str = "Help with my 8search account") -> str:
+    """mailto: link that reaches the 8search support inbox."""
+    return f"mailto:{feedback_email()}?subject={quote(subject)}"
 
 
 def send_email(
@@ -76,38 +109,39 @@ def send_email(
 ) -> bool:
     """Send an email. Returns True on success, False otherwise.
 
-    Delivery failures are logged and never raised, so they can safely run as
-    FastAPI background tasks without breaking the request.
+    Every failure — malformed configuration, DNS errors, SMTP timeouts — is
+    logged and swallowed. These calls run as FastAPI background tasks, so they
+    must never crash a signup, login, logout, or feedback request.
     """
-    cfg = _smtp_config()
-    subject = _header_safe(subject)
-    to_email = _header_safe(to_email)
-    reply_to = _header_safe(reply_to) if reply_to else None
-
-    if not is_configured():
-        logger.warning("SMTP not configured; email to %s was not sent", to_email)
-        print(
-            "\n─── 8search email (SMTP not configured) ─────────────────────\n"
-            f"To: {to_email}\n"
-            + (f"Reply-To: {reply_to}\n" if reply_to else "")
-            + f"Subject: {subject}\n\n"
-            f"{text_body}\n"
-            "─────────────────────────────────────────────────────────────\n",
-            flush=True,
-        )
-        return False
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = cfg["sender"]
-    msg["To"] = to_email
-    if reply_to:
-        msg["Reply-To"] = reply_to
-    msg.set_content(text_body)
-    if html_body:
-        msg.add_alternative(html_body, subtype="html")
-
     try:
+        cfg = _smtp_config()
+        subject = _header_safe(subject)
+        to_email = _header_safe(to_email)
+        reply_to = _header_safe(reply_to) if reply_to else None
+
+        if not is_configured():
+            logger.warning("SMTP not configured; email to %s was not sent", to_email)
+            print(
+                "\n─── 8search email (SMTP not configured) ─────────────────────\n"
+                f"To: {to_email}\n"
+                + (f"Reply-To: {reply_to}\n" if reply_to else "")
+                + f"Subject: {subject}\n\n"
+                f"{text_body}\n"
+                "─────────────────────────────────────────────────────────────\n",
+                flush=True,
+            )
+            return False
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = cfg["sender"]
+        msg["To"] = to_email
+        if reply_to:
+            msg["Reply-To"] = reply_to
+        msg.set_content(text_body)
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
+
         if cfg["security"] == "ssl":
             context = ssl.create_default_context()
             with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=15, context=context) as smtp:
@@ -186,10 +220,80 @@ def send_password_reset(to_email: str, reset_url: str, ttl_minutes: int = 30) ->
     return send_email(to_email, subject, text_body, html_body)
 
 
+def _email_shell(title: str, inner_html: str) -> str:
+    """Shared, email-client-safe dark layout for account notifications."""
+    return f"""\
+<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:0;background:#0a0a0a;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#111111;border:1px solid #2a2a2a;border-radius:12px;padding:32px;">
+            <tr>
+              <td style="padding-bottom:6px;">
+                <div style="color:#00e676;font-size:26px;font-weight:800;line-height:1.2;">8search</div>
+                <div style="color:#757575;font-size:11px;letter-spacing:0.09em;text-transform:uppercase;padding-top:5px;">Account security</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="color:#e0e0e0;font-size:16px;line-height:1.6;padding-top:14px;">
+                <h1 style="margin:0 0 18px;color:#ffffff;font-size:21px;line-height:1.3;">{title}</h1>
+                {inner_html}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:24px;border-top:1px solid #2a2a2a;color:#757575;font-size:12px;line-height:1.6;">
+                This is an automated security message from 8search.
+                8search will never ask for your password by email.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _details_block(rows: list[tuple[str, str]]) -> str:
+    cells = "<br>\n".join(
+        f'<strong style="color:#e0e0e0;">{html.escape(label)}:</strong> {html.escape(value)}'
+        for label, value in rows
+    )
+    return (
+        '<table role="presentation" cellpadding="0" cellspacing="0" '
+        'style="width:100%;margin:0 0 20px;background:#151515;border:1px solid #2a2a2a;border-radius:8px;">'
+        '<tr><td style="padding:14px 16px;color:#9e9e9e;font-size:14px;line-height:1.8;">'
+        f"{cells}</td></tr></table>"
+    )
+
+
+def _action_buttons(primary_label: str, primary_url: str, support_href: str) -> str:
+    return f"""\
+<p style="margin:0 0 12px;">
+  <a href="{html.escape(primary_url, quote=True)}"
+     style="display:inline-block;background:#00e676;color:#000000;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:6px;">
+    {html.escape(primary_label)}
+  </a>
+</p>
+<p style="margin:0 0 4px;color:#9e9e9e;font-size:14px;">
+  If this wasn't you, or you need help, contact 8search support.
+</p>
+<p style="margin:0;">
+  <a href="{html.escape(support_href, quote=True)}"
+     style="display:inline-block;border:1px solid #3d3d3d;color:#69f0ae;font-weight:600;text-decoration:none;padding:10px 18px;border-radius:6px;">
+    Get help
+  </a>
+</p>"""
+
+
 def send_login_notice(to_email: str, when: str, ip_address: str, user_agent: str) -> bool:
     """Send a security notice after a successful sign-in."""
     subject = "Security alert: new sign-in to your 8search account"
     reset_link = f"{app_base_url()}/forgot-password.html"
+    support_href = _support_mailto("I don't recognize a sign-in to my 8search account")
     text_body = (
         "Hello,\n\n"
         f"Your 8search account ({to_email}) was just signed in to.\n\n"
@@ -200,65 +304,111 @@ def send_login_notice(to_email: str, when: str, ip_address: str, user_agent: str
         "If you don't recognize this activity, your account may be at risk.\n"
         "Reset your password immediately:\n"
         f"{reset_link}\n\n"
-        "You can also reply to this email to report the sign-in to the 8search team.\n"
+        "If this wasn't you, or you need help, contact 8search support:\n"
+        f"{support_href}\n\n"
+        "You can also reply to this email to reach the 8search team.\n"
     )
     safe_email = html.escape(to_email)
-    safe_when = html.escape(when)
-    safe_ip = html.escape(ip_address)
-    safe_ua = html.escape(user_agent)
-    safe_link = html.escape(reset_link, quote=True)
-    html_body = f"""\
-<!DOCTYPE html>
-<html>
-  <body style="margin:0;padding:0;background:#0a0a0a;font-family:Arial,Helvetica,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:32px 16px;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#111111;border:1px solid #2a2a2a;border-radius:12px;padding:32px;">
-            <tr>
-              <td style="color:#00e676;font-size:26px;font-weight:800;padding-bottom:16px;">8search</td>
-            </tr>
-            <tr>
-              <td style="color:#e0e0e0;font-size:16px;line-height:1.6;">
-                <p style="margin:0 0 12px;">Hello,</p>
-                <p style="margin:0 0 20px;">
-                  Your 8search account (<strong>{safe_email}</strong>) was just signed in to.
-                </p>
-                <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 20px;background:#151515;border:1px solid #2a2a2a;border-radius:8px;">
-                  <tr>
-                    <td style="padding:14px 16px;color:#9e9e9e;font-size:14px;line-height:1.7;">
-                      <strong style="color:#e0e0e0;">Time:</strong> {safe_when}<br>
-                      <strong style="color:#e0e0e0;">IP address:</strong> {safe_ip}<br>
-                      <strong style="color:#e0e0e0;">Device:</strong> {safe_ua}
-                    </td>
-                  </tr>
-                </table>
-                <p style="margin:0 0 12px;">
-                  If this was you, no action is needed.
-                </p>
-                <p style="margin:0 0 20px;color:#9e9e9e;font-size:14px;">
-                  If you don't recognize this activity, your account may be at risk.
-                  Reset your password immediately.
-                </p>
-                <p style="margin:0 0 18px;">
-                  <a href="{safe_link}"
-                     style="display:inline-block;background:#00e676;color:#000000;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:6px;">
-                    Reset password
-                  </a>
-                </p>
-                <p style="margin:0;color:#9e9e9e;font-size:13px;">
-                  You can also reply to this email to report the sign-in to the 8search team.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
+    inner = f"""\
+<p style="margin:0 0 12px;">Hello,</p>
+<p style="margin:0 0 20px;">
+  Your 8search account (<strong>{safe_email}</strong>) was just signed in to.
+</p>
+{_details_block([("Time", when), ("IP address", ip_address), ("Device", user_agent)])}
+<p style="margin:0 0 12px;">If this was you, no action is needed.</p>
+<p style="margin:0 0 20px;color:#9e9e9e;font-size:14px;">
+  If you don't recognize this activity, reset your password immediately.
+</p>
+{_action_buttons("Reset password", reset_link, support_href)}
 """
-    return send_email(to_email, subject, text_body, html_body)
+    return send_email(
+        to_email,
+        subject,
+        text_body,
+        _email_shell(html.escape("New sign-in to your 8search account"), inner),
+        reply_to=feedback_email() or None,
+    )
+
+
+def send_welcome_email(to_email: str, when: str, ip_address: str, user_agent: str) -> bool:
+    """Welcome a new account and explain how to get help."""
+    subject = "Welcome to 8search — your account is ready"
+    home_link = app_base_url()
+    support_href = _support_mailto("Help getting started with my 8search account")
+    text_body = (
+        "Hello,\n\n"
+        f"Welcome to 8search. Your account ({to_email}) is ready to use.\n\n"
+        f"Created: {when}\n"
+        f"IP address: {ip_address}\n"
+        f"Device: {user_agent}\n\n"
+        "You can now sign in for unlimited searches, saved history, images,\n"
+        "news, weather, maps, and the in-app camera tools.\n\n"
+        f"Start searching: {home_link}\n\n"
+        "If you didn't create this account, or you need help, contact 8search support:\n"
+        f"{support_href}\n\n"
+        "You can also reply to this email to reach the 8search team.\n"
+    )
+    safe_email = html.escape(to_email)
+    inner = f"""\
+<p style="margin:0 0 12px;">Hello,</p>
+<p style="margin:0 0 20px;">
+  Welcome to 8search. Your account (<strong>{safe_email}</strong>) is ready to use.
+</p>
+{_details_block([("Created", when), ("IP address", ip_address), ("Device", user_agent)])}
+<p style="margin:0 0 14px;">
+  You can now sign in for unlimited searches, saved history, images, news,
+  weather, maps, and the in-app camera tools.
+</p>
+{_action_buttons("Start searching", home_link, support_href)}
+"""
+    return send_email(
+        to_email,
+        subject,
+        text_body,
+        _email_shell(html.escape("Your 8search account is ready"), inner),
+        reply_to=feedback_email() or None,
+    )
+
+
+def send_logout_notice(to_email: str, when: str, ip_address: str, user_agent: str) -> bool:
+    """Confirm that a session was signed out."""
+    subject = "You've been signed out of 8search"
+    login_link = f"{app_base_url()}/login.html"
+    support_href = _support_mailto("I didn't sign out of my 8search account")
+    text_body = (
+        "Hello,\n\n"
+        f"Your 8search account ({to_email}) was signed out of a session.\n\n"
+        f"Time: {when}\n"
+        f"IP address: {ip_address}\n"
+        f"Device: {user_agent}\n\n"
+        "If this was you, no action is needed.\n\n"
+        "If you didn't sign out, someone else may have used your device or account.\n"
+        f"Sign back in here: {login_link}\n\n"
+        "If this wasn't you, or you need help, contact 8search support:\n"
+        f"{support_href}\n\n"
+        "You can also reply to this email to reach the 8search team.\n"
+    )
+    safe_email = html.escape(to_email)
+    inner = f"""\
+<p style="margin:0 0 12px;">Hello,</p>
+<p style="margin:0 0 20px;">
+  Your 8search account (<strong>{safe_email}</strong>) was signed out of a session.
+</p>
+{_details_block([("Time", when), ("IP address", ip_address), ("Device", user_agent)])}
+<p style="margin:0 0 12px;">If this was you, no action is needed.</p>
+<p style="margin:0 0 20px;color:#9e9e9e;font-size:14px;">
+  If you didn't sign out, someone else may have used your device or account.
+  Sign back in to keep your account secure.
+</p>
+{_action_buttons("Sign back in", login_link, support_href)}
+"""
+    return send_email(
+        to_email,
+        subject,
+        text_body,
+        _email_shell(html.escape("Signed out of 8search"), inner),
+        reply_to=feedback_email() or None,
+    )
 
 
 def send_feedback_notice(

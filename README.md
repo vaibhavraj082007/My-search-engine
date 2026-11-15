@@ -63,6 +63,7 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 | Earthquake overlay (USGS) | ✅ | ✅ |
 | Globe/Flat & Map/Satellite toggle | ✅ | ✅ |
 | Search history & preferences | ❌ | ✅ |
+| In-app Lens camera (QR, text, homework, translate) | ✅ | ✅ |
 
 ---
 
@@ -97,6 +98,8 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 │   ├── style.css                # Colours, layout, dark theme
 │   ├── app.js                   # Search logic, login state, UTC clock
 │   ├── map.js                   # Globe, weather panel, click handler
+│   ├── lens.js                  # In-app camera, QR scanning, OCR, Lens panel
+│   ├── vendor/jsQR.js           # Local QR fallback decoder
 │   ├── login.html               # Login page
 │   └── signup.html              # Sign-up page
 │
@@ -107,6 +110,7 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 │   ├── searchdb.py              # Search index database
 │   ├── crawler.py               # Web crawler (respects robots.txt)
 │   ├── weather_api.py           # Weather proxy (Open-Meteo, 15-min cache)
+│   ├── lens.py                  # /api/solve (SymPy) and /api/translate
 │   └── data/                    # Auto-created: SQLite databases
 │
 ├── requirements.txt             # Python dependencies
@@ -197,6 +201,48 @@ After crawling, matching pages are merged into web results.
 
 ---
 
+## 📷 8search Lens — In-App Visual Search
+
+The camera button next to the search bar opens a **Lens-style camera inside
+8search**. Nothing is redirected to Google Lens, and the photo stays in the
+browser; only the text you choose to solve or translate is sent to the server.
+
+| In the camera | What happens |
+| --- | --- |
+| **QR codes & barcodes** | Detected automatically, with the result shown in the panel. URLs get an **Open link** button; Wi-Fi codes show the network and password (with copy); contact cards and plain text can be copied. |
+| **Text** | OCR reads the photo, then you can **copy**, **listen** (speech synthesis), search the text on 8search, or **translate** it. |
+| **Homework / math** | Equations are solved with **SymPy** and shown with the detected expression and step-by-step working. Supports linear equations, quadratics, equation systems separated by `;` or new lines, percentages (`15% of 80`), derivatives, and integrals. |
+| **Translation** | Choose from 29 languages. The recognized text is translated by `/api/translate` and can be copied or read aloud. |
+| **Photos** | **Retake** or **New scan** returns to the live camera. Upload a photo as a fallback when camera access is blocked. |
+
+### Camera details
+
+- Live preview uses `getUserMedia`; the rear camera is preferred and a **switch
+  camera** button flips between front and rear. Flashlight is shown when the
+  device supports it.
+- QR detection uses the browser's native `BarcodeDetector` when available and
+  falls back to the local `frontend/vendor/jsQR.js`, so QR scanning works in
+  Chrome, Edge, and Safari-style browsers. jsQR 1.4.0 is vendored under the
+  Apache-2.0 licence (see `frontend/vendor/README.md`).
+- Text recognition uses **Tesseract.js 5.1.1**, loaded from jsDelivr on first
+  use. The first OCR run therefore needs an internet connection; afterwards the
+  worker is reused for the rest of the session.
+- Photos are downscaled before OCR to keep recognition fast. Capture, OCR, and
+  QR decoding all happen locally.
+- The URL/Wi-Fi/contact parsing and clipboard actions are implemented in
+  `frontend/lens.js`; math and translation are the only server calls.
+
+> **Requirements:** camera access needs **HTTPS** (or `localhost`). On a phone,
+> open the site over HTTPS or via your computer's local address with a trusted
+> certificate; browsers block `getUserMedia` on plain HTTP origins.
+>
+> **Scope:** this is an in-app approximation of Lens — QR, OCR, homework, and
+> translation. It does not use Google's proprietary visual product database, so
+> recognizing an object from the image alone (without readable text) is not
+> included.
+
+---
+
 ## 🌐 The Globe — Live Weather on Click
 
 The satellite globe is the centrepiece of 8search. It sits directly below the search bar.
@@ -277,6 +323,8 @@ Key endpoints:
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/search?q=...` | GET | Answer-first web search (cached, rate-limited) |
+| `/api/solve` | POST | Solve math/equations from recognized text (SymPy, with steps) |
+| `/api/translate` | POST | Translate recognized text into a chosen language |
 | `/api/weather?lat=...&lon=...` | GET | Live weather for coordinates |
 | `/api/signup` | POST | Create account |
 | `/api/login` | POST | Log in (sends a sign-in alert email) |
@@ -298,6 +346,9 @@ Key endpoints:
 | `No module named fastapi` | Activate the venv: `source venv/bin/activate` |
 | Blank globe | Open browser console (Cmd+Option+J) and check for errors |
 | `502` on weather | Open-Meteo is temporarily unreachable |
+| Camera button shows "Camera unavailable" | Allow camera access for the site, or upload a photo instead. `getUserMedia` requires HTTPS or `localhost`. |
+| OCR does not start | Tesseract.js is loaded from jsDelivr on first use — check the internet connection and any content blockers. |
+| Math answer says "No solvable math expression" | Keep the equation in the frame and avoid glare; retake the photo or type it into the search bar. |
 
 ---
 
@@ -328,6 +379,7 @@ math, environment variables, and load-test instructions.
 - [x] Live local time of clicked location
 - [x] 16-day forecast
 - [x] Earthquake overlay (USGS)
+- [x] In-app Lens camera: QR, OCR, homework solving, translation
 - [x] User accounts with secure password hashing
 - [ ] Search suggestions / autocomplete
 - [ ] Search history for logged-in users

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261114-7">
+  <link rel="stylesheet" href="style.css?v=20261115-3">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body class="landing-page">
@@ -49,7 +49,7 @@
           </svg>
         </button>
 
-        <button type="button" id="cameraSearchBtn" class="search-camera-btn" aria-label="Search with an image" title="Search with Google Lens">
+        <button type="button" id="cameraSearchBtn" class="search-camera-btn" aria-label="Search with the camera" title="Search with the camera">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path>
             <circle cx="12" cy="13" r="3.4"></circle>
@@ -262,6 +262,135 @@
     <div id="infoBody" class="info-body"></div>
   </dialog>
 
+  <!-- In-app visual search camera (Lens-style) -->
+  <div id="lensModal" class="lens-modal hidden" role="dialog" aria-modal="true" aria-labelledby="lensTitle">
+    <div class="lens-backdrop" id="lensBackdrop"></div>
+    <div class="lens-shell" role="document">
+      <header class="lens-head">
+        <div class="lens-brand">
+          <span class="lens-brand-mark">8</span>
+          <span id="lensTitle">Lens</span>
+          <span class="lens-brand-note">visual search</span>
+        </div>
+        <div class="lens-head-actions">
+          <button type="button" class="lens-icon-btn lens-icon-btn-light" id="lensUploadTop" aria-label="Upload a photo" title="Upload a photo">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 16V4"></path>
+              <path d="m7 9 5-5 5 5"></path>
+              <path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path>
+            </svg>
+          </button>
+          <button type="button" class="lens-icon-btn lens-icon-btn-light" id="lensCloseBtn" aria-label="Close visual search" title="Close">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="lens-body">
+        <section class="lens-stage" aria-label="Camera preview">
+          <video id="lensVideo" playsinline muted autoplay></video>
+          <img id="lensPreview" class="lens-preview hidden" alt="Captured photo">
+          <canvas id="lensCanvas" hidden></canvas>
+
+          <div class="lens-scan-frame" id="lensScanFrame" aria-hidden="true">
+            <span class="lens-corner lens-corner-tl"></span>
+            <span class="lens-corner lens-corner-tr"></span>
+            <span class="lens-corner lens-corner-bl"></span>
+            <span class="lens-corner lens-corner-br"></span>
+            <span class="lens-scan-line"></span>
+          </div>
+
+          <div class="lens-stage-top">
+            <button type="button" class="lens-icon-btn" id="lensTorchBtn" aria-label="Turn on flashlight" title="Flashlight" hidden>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 2h6l-1 6 3 4v10H7V12l3-4-1-6z"></path>
+                <path d="M7 12h10"></path>
+              </svg>
+            </button>
+            <button type="button" class="lens-icon-btn" id="lensSwitchBtn" aria-label="Switch camera" title="Switch camera">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20 8a8 8 0 0 0-13.7-3L4 7"></path>
+                <path d="M4 3v4h4"></path>
+                <path d="M4 16a8 8 0 0 0 13.7 3L20 17"></path>
+                <path d="M20 21v-4h-4"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="lens-status" id="lensStatus" role="status" aria-live="polite">
+            Point your camera at a QR code, a sign, or a question.
+          </div>
+          <div class="lens-progress hidden" id="lensProgress" aria-hidden="true"><span id="lensProgressBar"></span></div>
+
+          <div class="lens-camera-controls" id="lensCameraControls">
+            <button type="button" class="lens-side-btn" id="lensUploadBtn" aria-label="Choose a photo" title="Choose a photo">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="3"></rect>
+                <circle cx="8.5" cy="8.5" r="1.6"></circle>
+                <path d="m21 15-4.5-4.5L7 20"></path>
+              </svg>
+            </button>
+
+            <button type="button" class="lens-shutter" id="lensShutterBtn" aria-label="Take a photo" title="Take a photo">
+              <span class="lens-shutter-ring"></span>
+              <span class="lens-shutter-dot"></span>
+            </button>
+
+            <button type="button" class="lens-side-btn" id="lensTypeBtn" aria-label="Type instead" title="Type instead">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="6" width="18" height="12" rx="2.5"></rect>
+                <path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="lens-capture-actions hidden" id="lensCaptureActions">
+            <button type="button" class="lens-action-light" id="lensRetakeBtn">Retake</button>
+            <button type="button" class="lens-action-light" id="lensNewScanBtn">New scan</button>
+          </div>
+
+          <div class="lens-camera-error hidden" id="lensCameraError">
+            <div class="lens-error-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path>
+                <path d="m9 13 6 6M15 13l-6 6"></path>
+              </svg>
+            </div>
+            <h3>Camera unavailable</h3>
+            <p id="lensCameraErrorText">Allow camera access, or upload a photo instead.</p>
+            <button type="button" class="lens-action-dark" id="lensErrorUploadBtn">Upload a photo</button>
+          </div>
+        </section>
+
+        <aside class="lens-panel" id="lensPanel" aria-label="Visual search results">
+          <div class="lens-panel-empty" id="lensPanelEmpty">
+            <div class="lens-empty-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path>
+                <circle cx="12" cy="13" r="3.4"></circle>
+              </svg>
+            </div>
+            <p class="lens-panel-kicker">8search Lens</p>
+            <h2>Point, shoot, understand.</h2>
+            <p>Scan a QR code, copy text from a page, solve a homework question, or translate a sign — all without leaving 8search.</p>
+            <ul class="lens-tips">
+              <li><span>QR</span> Open links, Wi-Fi, and contact cards</li>
+              <li><span>Text</span> Copy, listen, search, or translate</li>
+              <li><span>Solve</span> Equations and math problems with steps</li>
+            </ul>
+            <p class="lens-privacy">Photos stay in your browser. Only the text you choose to solve or translate is sent to the server.</p>
+          </div>
+          <div class="lens-result hidden" id="lensResult"></div>
+        </aside>
+      </div>
+
+      <input type="file" id="lensFileInput" accept="image/*" hidden>
+      <div class="lens-toast hidden" id="lensToast" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
   <!-- Gemini shortcut -->
   <a class="gemini-fab" href="https://gemini.google.com/app"
      target="_blank" rel="noopener noreferrer"
@@ -273,7 +402,9 @@
   </a>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js?v=20261114-7"></script>
+  <script src="vendor/jsQR.js?v=20261115-1"></script>
+  <script src="app.js?v=20261115-4"></script>
   <script src="map.js?v=20261114-7"></script>
+  <script src="lens.js?v=20261115-3"></script>
 </body>
 </html>

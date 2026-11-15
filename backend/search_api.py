@@ -61,6 +61,12 @@ DDGS_CONCURRENCY = max(1, int(os.getenv("DDGS_CONCURRENCY", "6")))
 DDGS_TIMEOUT = float(os.getenv("DDGS_TIMEOUT", "4"))
 DDGS_IMAGE_TIMEOUT = float(os.getenv("DDGS_IMAGE_TIMEOUT", "8"))
 DDGS_RETRY_DELAY = float(os.getenv("DDGS_RETRY_DELAY", "0.4"))
+# Search providers are raced against this short window. The page is rendered
+# from whichever healthy provider answers first instead of waiting for the
+# slowest one; stragglers only get extra time when the page is still thin.
+WEB_FAST_WINDOW = float(os.getenv("WEB_FAST_WINDOW", "1.1"))
+WEB_EXTRA_WINDOW = float(os.getenv("WEB_EXTRA_WINDOW", "1.4"))
+NEWS_FAST_WINDOW = float(os.getenv("NEWS_FAST_WINDOW", "1.0"))
 IMAGE_RESULTS_PER_PAGE = max(12, min(48, int(os.getenv("IMAGE_RESULTS_PER_PAGE", "30"))))
 IMAGE_CACHE_TTL = int(os.getenv("IMAGE_CACHE_TTL", "900"))
 UPSTREAM_MIN_RESULTS = max(1, int(os.getenv("UPSTREAM_MIN_RESULTS", "5")))
@@ -298,48 +304,115 @@ def _dedupe_results(results: list[dict]) -> list[dict]:
     return pool
 
 
-async def _fetch_web_chunk(query: str, upstream_page: int) -> list[dict]:
-    """Fetch one upstream page and merge independent providers.
+def _silence_task(task: asyncio.Task) -> None:
+    """Consume a finished task's result so asyncio logs no stray exceptions."""
+    if task.cancelled():
+        return
+    try:
+        task.exception()
+    except Exception:
+        pass
 
-    Three independent sources are queried in parallel: the ddgs "auto" pool,
-    Bing RSS, and Yahoo. No single provider is dependable under load, but their
-    union almost always fills a page. Results are de-duplicated here, which is
+
+async def _fetch_web_chunk(query: str, upstream_page: int) -> list[dict]:
+    """Fetch one upstream page and merge independent providers quickly.
+
+    Three independent sources are raced in parallel: the ddgs "auto" pool,
+    Bing RSS, and Yahoo. As soon as one of them fills a page the slower calls
+    are cancelled, so a healthy provider at ~0.4 s no longer waits on a
+    throttled one that takes 3-4 s. If the first window leaves the page thin,
+    the remaining providers get a short extra window before the page is
+    rendered with what is available. Results are de-duplicated here, which is
     what makes page slices stable and non-repeating. Everything is cached, so
-    the extra breadth costs one set of calls per query/page per cache window
-    rather than one per user request.
+    the breadth costs one set of calls per query/page per cache window.
     """
     limit = UPSTREAM_RESULTS_PER_PAGE * 2
-    ddgs_results, bing_results, yahoo_results = await asyncio.gather(
-        _run_ddgs(_ddgs_web_search, query, UPSTREAM_RESULTS_PER_PAGE, upstream_page),
-        _bing_rss_web_search(query, UPSTREAM_RESULTS_PER_PAGE, upstream_page),
-        _run_ddgs(
-            _ddgs_web_search,
-            query,
-            UPSTREAM_RESULTS_PER_PAGE,
-            upstream_page,
-            "yahoo",
+    loop = asyncio.get_running_loop()
+    tasks = [
+        asyncio.create_task(
+            _run_ddgs(
+                _ddgs_web_search, query, UPSTREAM_RESULTS_PER_PAGE, upstream_page
+            )
         ),
-    )
+        asyncio.create_task(
+            _bing_rss_web_search(query, UPSTREAM_RESULTS_PER_PAGE, upstream_page)
+        ),
+        asyncio.create_task(
+            _run_ddgs(
+                _ddgs_web_search,
+                query,
+                UPSTREAM_RESULTS_PER_PAGE,
+                upstream_page,
+                "yahoo",
+            )
+        ),
+    ]
+    pending = set(tasks)
+    merged: list[dict] = []
 
-    merged = _merge_results(ddgs_results, bing_results, limit)
-    merged = _merge_results(merged, yahoo_results, limit)
+    async def absorb(done: set[asyncio.Task]) -> None:
+        nonlocal merged
+        for task in done:
+            pending.discard(task)
+            try:
+                results = task.result()
+            except Exception:
+                results = []
+            merged = _merge_results(merged, results or [], limit)
 
-    # DDG intermittently returns an empty/short page when it is throttling.
-    # One short retry recovers most of those pages; the retry is cached with
-    # the chunk, so the extra upstream call happens only on a cache miss.
-    if len(merged) < UPSTREAM_MIN_RESULTS:
-        await asyncio.sleep(DDGS_RETRY_DELAY)
-        retry = await _run_ddgs(
-            _ddgs_web_search, query, UPSTREAM_RESULTS_PER_PAGE, upstream_page
+    try:
+        deadline = loop.time() + WEB_FAST_WINDOW
+        while pending:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            done, _ = await asyncio.wait(
+                pending,
+                timeout=remaining,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                break
+            await absorb(done)
+            if len(_dedupe_results(merged)) >= RESULTS_PER_PAGE:
+                break
+
+        # A full page is ready. A thin page gets a little longer for the
+        # remaining providers instead of failing over immediately.
+        if len(_dedupe_results(merged)) < UPSTREAM_MIN_RESULTS:
+            deadline = loop.time() + WEB_EXTRA_WINDOW
+            while pending:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    break
+                done, _ = await asyncio.wait(
+                    pending,
+                    timeout=remaining,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if not done:
+                    break
+                await absorb(done)
+                if len(_dedupe_results(merged)) >= UPSTREAM_MIN_RESULTS:
+                    break
+    finally:
+        still_pending = list(pending)
+        for task in still_pending:
+            task.cancel()
+        for task in still_pending:
+            task.add_done_callback(_silence_task)
+
+    usable = _dedupe_results(merged)
+
+    # Every provider came back empty (not merely slow): try the HTML endpoint.
+    if not usable and not still_pending:
+        usable = _dedupe_results(
+            await _html_web_search(
+                query, UPSTREAM_RESULTS_PER_PAGE, upstream_page
+            )
         )
-        merged = _merge_results(merged, retry, limit)
 
-    if not merged:
-        merged = await _html_web_search(
-            query, UPSTREAM_RESULTS_PER_PAGE, upstream_page
-        )
-
-    return _dedupe_results(merged)
+    return usable
 
 
 async def _web_chunk(query: str, upstream_page: int) -> list[dict]:
@@ -583,10 +656,44 @@ async def _bing_rss_news_search(query: str, max_results: int = 6) -> list[dict]:
 
 
 async def _news_search(query: str, max_results: int = 6) -> list[dict]:
-    results = await _run_ddgs(_news_search_ddgs, query, max_results)
-    if len(results) < 3:
-        extra = await _bing_rss_news_search(query, max_results)
-        results = _merge_results(results, extra, max_results)
+    """Race DDGS news against Bing News RSS and keep the first useful set."""
+    loop = asyncio.get_running_loop()
+    tasks = [
+        asyncio.create_task(_run_ddgs(_news_search_ddgs, query, max_results)),
+        asyncio.create_task(_bing_rss_news_search(query, max_results)),
+    ]
+    pending = set(tasks)
+    results: list[dict] = []
+
+    try:
+        deadline = loop.time() + NEWS_FAST_WINDOW
+        while pending:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            done, _ = await asyncio.wait(
+                pending,
+                timeout=remaining,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if not done:
+                break
+            for task in done:
+                pending.discard(task)
+                try:
+                    batch = task.result()
+                except Exception:
+                    batch = []
+                results = _merge_results(results, batch or [], max_results * 2)
+            if len(results) >= 3:
+                break
+    finally:
+        still_pending = list(pending)
+        for task in still_pending:
+            task.cancel()
+        for task in still_pending:
+            task.add_done_callback(_silence_task)
+
     return results[:max_results]
 
 

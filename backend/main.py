@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from . import auth, feedback, searchdb
 from .answers import close_http_client
 from .cache import cache
+from .lens import router as lens_router
 from .ratelimit import limiter
 from .search_api import router as search_router
 from .weather_api import router as weather_router
@@ -110,6 +111,7 @@ async def ready():
 # Include API routers
 app.include_router(auth.router)
 app.include_router(feedback.router)
+app.include_router(lens_router)
 app.include_router(search_router)
 app.include_router(weather_router)
 

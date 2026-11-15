@@ -28,7 +28,6 @@
   var feedbackMessage = document.getElementById('feedbackMessage');
   var feedbackSubmit  = document.getElementById('feedbackSubmit');
   var feedbackStatus  = document.getElementById('feedbackStatus');
-  var cameraSearchBtn = document.getElementById('cameraSearchBtn');
   var searchTabs      = document.querySelectorAll('.search-tab');
   var addShortcutBtn  = document.getElementById('addShortcutBtn');
   var shortcutRow     = document.getElementById('shortcutRow');
@@ -69,6 +68,10 @@
   // ---------- Sign-in prompt ----------
   function showSigninPrompt() {
     if (!signinPrompt || currentUser || signinShown) return;
+    if (document.body.classList.contains('lens-open')) {
+      window.setTimeout(showSigninPrompt, 8000);
+      return;
+    }
     signinShown = true;
     signinPrompt.classList.remove('hidden');
     document.body.classList.add('signin-open');
@@ -268,11 +271,7 @@
   }
 
   // ---------- Camera / visual search ----------
-  if (cameraSearchBtn) {
-    cameraSearchBtn.addEventListener('click', function () {
-      window.open('https://lens.google.com/', '_blank', 'noopener,noreferrer');
-    });
-  }
+  // Handled by lens.js so the camera opens in-app instead of a new tab.
 
   // ---------- Slash-to-search ----------
   document.addEventListener('keydown', function (e) {
@@ -503,6 +502,58 @@
     } catch (e) {}
   }
 
+  // ---------- Repeat-search cache ----------
+  // Repeating a query (back/forward, tab switch, resubmit) renders instantly
+  // from this tab instead of waiting on the network. The server also caches,
+  // but skipping the round-trip makes repeats feel immediate even on 5G.
+  var SEARCH_CACHE_PREFIX = '8search.cache.';
+  var SEARCH_CACHE_TTL = 5 * 60 * 1000;
+  var SEARCH_CACHE_MAX = 40;
+
+  function searchCacheKey(mode, query, page) {
+    return SEARCH_CACHE_PREFIX + mode + '|' + page + '|' + query.trim().toLowerCase();
+  }
+
+  function readSearchCache(key) {
+    try {
+      var raw = window.sessionStorage.getItem(key);
+      if (!raw) return null;
+      var entry = JSON.parse(raw);
+      if (!entry || !entry.at || Date.now() - entry.at > SEARCH_CACHE_TTL) {
+        window.sessionStorage.removeItem(key);
+        return null;
+      }
+      return entry.data || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeSearchCache(key, data) {
+    if (!data || data.redirect || data.limit_reached) return;
+    try {
+      var entries = [];
+      for (var i = 0; i < window.sessionStorage.length; i++) {
+        var name = window.sessionStorage.key(i);
+        if (name && name.indexOf(SEARCH_CACHE_PREFIX) === 0) {
+          var at = 0;
+          try { at = JSON.parse(window.sessionStorage.getItem(name)).at || 0; } catch (e) {}
+          entries.push({ name: name, at: at });
+        }
+      }
+      entries.sort(function (a, b) { return a.at - b.at; });
+      while (entries.length >= SEARCH_CACHE_MAX) {
+        window.sessionStorage.removeItem(entries.shift().name);
+      }
+      window.sessionStorage.setItem(
+        key,
+        JSON.stringify({ at: Date.now(), data: data })
+      );
+    } catch (e) {
+      // Private mode or a full quota: caching is optional.
+    }
+  }
+
   function doSearch(q, lucky) {
     if (!q) return;
     // URL-like → navigate
@@ -529,6 +580,18 @@
     searchSection.classList.add('compact');
     if (globeSection) globeSection.classList.add('hidden');
     resultsSection.classList.remove('hidden');
+
+    var cacheKey = searchCacheKey(currentMode, query, page);
+    if (!lucky) {
+      var cached = readSearchCache(cacheKey);
+      if (cached) {
+        currentPage = cached.page || page;
+        if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
+        renderResults(cached);
+        pagination.setAttribute('aria-busy', 'false');
+        return;
+      }
+    }
 
     resultsContainer.innerHTML =
       '<div class="search-loading"><div class="spinner"></div><p>Searching…</p></div>';
@@ -567,6 +630,7 @@
           window.location.href = data.results[0].url; return;
         }
 
+        if (!lucky) writeSearchCache(cacheKey, data);
         currentPage = data.page || page;
         if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
         renderResults(data);
