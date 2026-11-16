@@ -120,6 +120,23 @@ def _hash_password(password: str) -> str:
         raise HTTPException(status_code=400, detail="Password is too long (maximum 72 characters)")
 
 
+def cookie_secure(request: Request) -> bool:
+    """Whether auth/guest cookies should carry the Secure flag.
+
+    COOKIE_SECURE overrides autodetection. Behind a trusted proxy, the
+    X-Forwarded-Proto header is used when TRUST_PROXY=1.
+    """
+    raw = os.getenv("COOKIE_SECURE", "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    proto = ""
+    if os.getenv("TRUST_PROXY", "0") == "1":
+        proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    return (proto or request.url.scheme or "").lower() == "https"
+
+
 def _verify_password(password: str, stored_hash: str) -> bool:
     try:
         return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode())
@@ -245,7 +262,7 @@ def login(
         value=token,
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=cookie_secure(request),
         max_age=60 * 60 * 24 * 30,  # 30 days
         path="/",
     )

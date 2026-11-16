@@ -36,6 +36,10 @@
   var infoTitle       = document.getElementById('infoTitle');
   var infoBody        = document.getElementById('infoBody');
   var infoClose       = document.getElementById('infoClose');
+  var suggestionsEl   = document.getElementById('suggestions');
+  var engineBanner    = document.getElementById('engineBanner');
+  var engineBannerClose = document.getElementById('engineBannerClose');
+  var trendingNews    = document.getElementById('trendingNews');
 
   var currentUser  = null;
   var currentQuery = '';
@@ -46,6 +50,8 @@
   var MAX_PAGE     = 10;
   var signinShown  = false;
   var MODES        = ['web', 'ai', 'images', 'code'];
+  var MAX_QUERY    = 500;
+  var ENGINE_HINT_KEY = '8search.engineHintDismissed';
 
   var MODE_PLACEHOLDERS = {
     web:      'Search anything or type a calculation…',
@@ -183,6 +189,8 @@
     resultsContainer.innerHTML = '';
     pagination.innerHTML = '';
     if (globeSection) globeSection.classList.add('hidden');
+    if (trendingNews) trendingNews.classList.remove('hidden');
+    closeSuggestions();
     searchInput.value = '';
     currentQuery = '';
     currentPage  = 1;
@@ -190,7 +198,10 @@
     setMode('web');
 
     if (pushHistory !== false) {
-      try { window.history.pushState({}, '', window.location.pathname); } catch (e) {}
+      try { window.history.pushState({}, '', '/'); } catch (e) {}
+    }
+    if (window.EightSearchNews && window.EightSearchNews.load) {
+      window.EightSearchNews.load();
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -201,6 +212,7 @@
   // ---------- Search submit ----------
   searchForm.addEventListener('submit', function (e) {
     e.preventDefault();
+    closeSuggestions();
     doSearch(searchInput.value.trim());
   });
 
@@ -214,6 +226,182 @@
 
   if (luckyBtn) luckyBtn.addEventListener('click', function () {
     doSearch(searchInput.value.trim(), true);
+  });
+
+  // ---------- Live suggestions ----------
+  var suggestState = {
+    timer: null,
+    controller: null,
+    items: [],
+    active: -1,
+    seq: 0,
+    lastQuery: ''
+  };
+
+  function closeSuggestions() {
+    if (!suggestionsEl) return;
+    if (suggestState.timer) {
+      window.clearTimeout(suggestState.timer);
+      suggestState.timer = null;
+    }
+    if (suggestState.controller) {
+      try { suggestState.controller.abort(); } catch (e) {}
+      suggestState.controller = null;
+    }
+    suggestState.items = [];
+    suggestState.active = -1;
+    suggestState.seq += 1;
+    suggestionsEl.classList.add('hidden');
+    suggestionsEl.replaceChildren();
+    searchInput.setAttribute('aria-expanded', 'false');
+    searchInput.removeAttribute('aria-activedescendant');
+  }
+
+  function updateSuggestionActive(nextIndex) {
+    if (!suggestState.items.length) return;
+    suggestState.active = (nextIndex + suggestState.items.length) % suggestState.items.length;
+    var options = suggestionsEl.querySelectorAll('.suggestion-item');
+    options.forEach(function (option, index) {
+      var active = index === suggestState.active;
+      option.classList.toggle('active', active);
+      option.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active) {
+        searchInput.setAttribute('aria-activedescendant', option.id);
+        if (option.scrollIntoView) option.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    if (suggestState.active < 0) searchInput.removeAttribute('aria-activedescendant');
+  }
+
+  function chooseSuggestion(text) {
+    if (!text) return;
+    searchInput.value = text;
+    closeSuggestions();
+    doSearch(text);
+  }
+
+  function renderSuggestions(items, typed) {
+    if (!suggestionsEl) return;
+    suggestState.items = items.slice(0, 8);
+    suggestState.active = -1;
+    suggestionsEl.replaceChildren();
+    if (!suggestState.items.length) {
+      suggestionsEl.classList.add('hidden');
+      searchInput.setAttribute('aria-expanded', 'false');
+      return;
+    }
+
+    suggestState.items.forEach(function (entry, index) {
+      var text = typeof entry === 'string' ? entry : entry.text;
+      if (!text) return;
+      var kind = typeof entry === 'string' ? 'web' : (entry.kind || 'web');
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'suggestion-item';
+      button.id = 'suggestion-' + index;
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', 'false');
+
+      var icon = document.createElement('span');
+      icon.className = 'suggestion-icon suggestion-icon-' + kind;
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = kind === 'popular' ? '↗' : (kind === 'local' ? '⌕' : 'W');
+
+      var label = document.createElement('span');
+      label.className = 'suggestion-text';
+      label.textContent = text;
+
+      var hint = document.createElement('span');
+      hint.className = 'suggestion-kind';
+      hint.textContent = kind === 'popular' ? 'Popular' : (kind === 'local' ? 'On this site' : '');
+
+      button.appendChild(icon);
+      button.appendChild(label);
+      if (hint.textContent) button.appendChild(hint);
+      // pointerdown prevents the input blur before click.
+      button.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+      button.addEventListener('click', function () { chooseSuggestion(text); });
+      button.addEventListener('mouseenter', function () { updateSuggestionActive(index); });
+      suggestionsEl.appendChild(button);
+    });
+
+    suggestionsEl.classList.remove('hidden');
+    searchInput.setAttribute('aria-expanded', 'true');
+  }
+
+  function requestSuggestions(typed) {
+    var query = (typed || '').trim();
+    if (!query) { closeSuggestions(); return; }
+    if (query === suggestState.lastQuery && suggestState.items.length) return;
+    suggestState.lastQuery = query;
+    var seq = ++suggestState.seq;
+    if (suggestState.controller) {
+      try { suggestState.controller.abort(); } catch (e) {}
+    }
+    var controller = window.AbortController ? new AbortController() : null;
+    suggestState.controller = controller;
+
+    fetch('/api/suggest?q=' + encodeURIComponent(query) + '&format=rich',
+          { credentials: 'same-origin', signal: controller ? controller.signal : undefined })
+      .then(function (r) {
+        if (!r.ok) throw new Error('suggestions unavailable');
+        return r.json();
+      })
+      .then(function (data) {
+        if (seq !== suggestState.seq) return;
+        if (!searchInput.value.trim() || searchInput.value.trim() !== query) return;
+        var items = data && Array.isArray(data.suggestions) ? data.suggestions : [];
+        renderSuggestions(items, query);
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        if (seq === suggestState.seq) {
+          suggestionsEl.classList.add('hidden');
+          searchInput.setAttribute('aria-expanded', 'false');
+        }
+      });
+  }
+
+  function scheduleSuggestions() {
+    var query = searchInput.value.trim();
+    if (!query) { closeSuggestions(); return; }
+    if (suggestState.timer) window.clearTimeout(suggestState.timer);
+    suggestState.timer = window.setTimeout(function () {
+      suggestState.timer = null;
+      requestSuggestions(query);
+    }, 120);
+  }
+
+  searchInput.addEventListener('input', scheduleSuggestions);
+  searchInput.addEventListener('focus', scheduleSuggestions);
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (!suggestionsEl.classList.contains('hidden')) {
+        e.preventDefault();
+        closeSuggestions();
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (suggestionsEl.classList.contains('hidden') || !suggestState.items.length) return;
+      e.preventDefault();
+      updateSuggestionActive(suggestState.active + (e.key === 'ArrowDown' ? 1 : -1));
+      return;
+    }
+    if (e.key === 'Enter' && suggestState.active >= 0 && suggestState.items.length) {
+      var active = suggestState.items[suggestState.active];
+      var value = typeof active === 'string' ? active : active.text;
+      if (value) {
+        e.preventDefault();
+        chooseSuggestion(value);
+      }
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!suggestionsEl || suggestionsEl.classList.contains('hidden')) return;
+    if (searchForm.contains(e.target)) return;
+    closeSuggestions();
   });
 
   // ---------- Landing category pills ----------
@@ -430,16 +618,23 @@
     privacy: {
       title: 'Privacy',
       body: '<p>8search keeps your account email and a securely hashed password so you can sign in. Guest searches use a short-lived cookie to apply the free-search limit.</p>' +
-            '<p>Feedback you send is stored locally and emailed to the site owner so it can be read and answered. We do not sell your data or run advertising trackers.</p>'
+            '<p>Click-popularity data is stored with salted hashes of the IP address and browser identifier, never raw IP addresses or a readable click history. We do not sell your data or run advertising trackers.</p>' +
+            '<p>Feedback you send is stored locally and emailed to the site owner so it can be read and answered.</p>'
+    },
+    ranking: {
+      title: 'How ranking works',
+      body: '<p>When people click a result on 8search, we remember that it was useful for that query. Results with more clicks move up; results nobody clicks move below them.</p>' +
+            '<p>Clicks lower on the page count for more, because top results get clicked more by accident. Clicks fade with a 30-day half-life, and one lucky click cannot outrank a result with many clicks.</p>' +
+            '<p>Only results 8search actually showed can be clicked, and we store just salted hashes of IP addresses and session identifiers. Brand-new queries keep the search provider order until there is data.</p>'
     },
     terms: {
       title: 'Terms',
-      body: '<p>Use 8search lawfully and responsibly. Search results, images, news, maps, and weather come from third-party sources and may change or be unavailable at any time.</p>' +
+      body: '<p>Use 8search lawfully and responsibly. Search results, images, news, and maps come from third-party sources and may change or be unavailable at any time.</p>' +
             '<p>Accounts are personal. Do not use the service to break the law, attack the site, or scrape it at a rate that harms other users. The service is provided as is, without warranties.</p>'
     },
     about: {
       title: 'About 8search',
-      body: '<p>8search is an answer-first search engine: quick answers, a Wikipedia card, videos, news, a live globe, and weather, all in one place.</p>' +
+      body: '<p>8search is an answer-first search engine: quick answers, a Wikipedia card, videos, news, and a live globe, all in one place.</p>' +
             '<p>It is a small independent project built with FastAPI, vanilla JavaScript, Leaflet, and open data sources. The light interface is designed to stay out of the way of the answer.</p>'
     }
   };
@@ -553,6 +748,106 @@
       // Private mode or a full quota: caching is optional.
     }
   }
+
+  // A click can change the server-side order immediately. Drop this query
+  // from the browser cache so the next search fetches the re-ranked page.
+  function invalidateSearchCacheFor(query) {
+    var suffix = '|' + String(query || '').trim().toLowerCase();
+    try {
+      for (var i = window.sessionStorage.length - 1; i >= 0; i--) {
+        var name = window.sessionStorage.key(i);
+        if (!name || name.indexOf(SEARCH_CACHE_PREFIX) !== 0) continue;
+        if (name.slice(name.lastIndexOf('|')).toLowerCase() === suffix) {
+          window.sessionStorage.removeItem(name);
+        }
+      }
+    } catch (e) {}
+  }
+
+  // ---------- Click-popularity tracking ----------
+  function clickAttrs(kind, url, title, position, token) {
+    if (!url || !token) return '';
+    var pos = parseInt(position, 10);
+    if (!isFinite(pos) || pos < 0) pos = 0;
+    return ' data-click-kind="' + escAttr(kind) + '"' +
+           ' data-click-url="' + escAttr(url) + '"' +
+           ' data-click-title="' + escAttr(title || '') + '"' +
+           ' data-click-position="' + pos + '"' +
+           ' data-click-token="' + escAttr(token) + '"';
+  }
+
+  function trackResultClick(link) {
+    if (!link) return;
+    var kind  = link.getAttribute('data-click-kind');
+    var token = link.getAttribute('data-click-token');
+    var url   = link.getAttribute('data-click-url') || link.href;
+    if (!kind || !url) return;
+    if (!token) {
+      // A payload cached before ranking shipped has no token. Drop it so the
+      // next search asks the server for a fresh, trackable response.
+      invalidateSearchCacheFor(currentQuery);
+      return;
+    }
+
+    var position = parseInt(link.getAttribute('data-click-position') || '0', 10);
+    var payload = JSON.stringify({
+      query: currentQuery,
+      url: url,
+      title: link.getAttribute('data-click-title') || '',
+      position: isFinite(position) ? position : 0,
+      kind: kind,
+      token: token
+    });
+
+    // sendBeacon is queued by the browser before navigation and never blocks
+    // the link opening. fetch(keepalive) is the fallback for older browsers.
+    var sent = false;
+    try {
+      if (navigator.sendBeacon) {
+        sent = navigator.sendBeacon(
+          '/api/click',
+          new Blob([payload], { type: 'application/json' })
+        );
+      }
+    } catch (e) { sent = false; }
+
+    if (!sent) {
+      try {
+        fetch('/api/click', {
+          method: 'POST',
+          credentials: 'same-origin',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      } catch (e) {}
+    }
+
+    invalidateSearchCacheFor(currentQuery);
+  }
+
+  function clickTarget(node) {
+    while (node && node !== resultsContainer) {
+      if (node.getAttribute && node.getAttribute('data-click-kind')) {
+        return node;
+      }
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  // Capture phase so the beacon is queued before the browser follows the
+  // link. Ctrl/Cmd+click and ordinary clicks both fire "click"; middle-click
+  // opens a new tab and fires "auxclick" instead.
+  resultsContainer.addEventListener('click', function (e) {
+    var link = clickTarget(e.target);
+    if (link) trackResultClick(link);
+  }, true);
+  resultsContainer.addEventListener('auxclick', function (e) {
+    if (e.button !== 1) return;
+    var link = clickTarget(e.target);
+    if (link) trackResultClick(link);
+  }, true);
 
   function doSearch(q, lucky) {
     if (!q) return;
@@ -742,13 +1037,25 @@
     if (videos.length) html += buildVideosSection(videos);
 
     // ── Web results ──
-    results.forEach(function (r) { html += buildResultCard(r); });
+    results.forEach(function (r, i) { html += buildResultCard(r, i + 1); });
+
+    // ── Click-popularity note ──
+    if (results.length) {
+      html +=
+        '<p class="ranking-note">Results are ordered by what people on 8search click most. ' +
+          '<button type="button" class="ranking-help" id="rankingHelp">How ranking works</button>' +
+        '</p>';
+    }
 
     // ── In the news ──
     if (news.length) html += buildNewsSection(news);
 
     resultsContainer.innerHTML = html;
     wireAnswerToggle();
+    var rankingHelp = document.getElementById('rankingHelp');
+    if (rankingHelp) {
+      rankingHelp.addEventListener('click', function () { openInfo('ranking'); });
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     renderPagination(page, data);
@@ -789,7 +1096,9 @@
 
     if (results.length) {
       html += '<div class="ai-sources"><div class="ai-sources-head">Sources</div>';
-      results.slice(0, 5).forEach(function (r) { html += buildResultCard(r); });
+      results.slice(0, 5).forEach(function (r, i) {
+        html += buildResultCard(r, i + 1);
+      });
       html += '</div>';
     }
 
@@ -839,7 +1148,7 @@
         '</div>' +
       '</div>';
 
-    results.forEach(function (r) { html += buildResultCard(r); });
+    results.forEach(function (r, i) { html += buildResultCard(r, i + 1); });
 
     resultsContainer.innerHTML = html;
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -903,8 +1212,10 @@
     var kicker = a.kind === 'definition' ? 'Meaning' : 'Quick answer';
     var text   = a.text || '';
     var expandable = text.length > 240;
+    var token = a.click_token || '';
     var source = a.url
-      ? '<a class="answer-source" href="' + escAttr(a.url) + '" target="_blank" rel="noopener">Source: ' +
+      ? '<a class="answer-source" href="' + escAttr(a.url) + '" target="_blank" rel="noopener"' +
+          clickAttrs('answer', a.url, a.title || currentQuery, a.click_position || 1, token) + '>Source: ' +
           esc(a.source || 'the web') + '</a>'
       : '<span class="answer-source">' + esc(a.source || '') + '</span>';
 
@@ -938,7 +1249,8 @@
   function buildWikiCard(wiki) {
     var url = wiki.url || '';
     return (
-      '<a class="wiki-card" href="' + escAttr(url) + '" target="_blank" rel="noopener">' +
+      '<a class="wiki-card" href="' + escAttr(url) + '" target="_blank" rel="noopener"' +
+        clickAttrs('wiki', url, wiki.title || '', wiki.click_position || 1, wiki.click_token || '') + '>' +
         '<div class="wiki-top"><span class="wiki-mark">W</span><span>Wikipedia</span></div>' +
         '<div class="wiki-title">' + esc(wiki.title || '') + '</div>' +
         '<div class="wiki-extract">' + esc(wiki.extract || wiki.description || '') + '</div>' +
@@ -953,10 +1265,11 @@
         '<div class="videos-heading">Videos</div>' +
         '<div class="video-list">';
 
-    videos.forEach(function (v) {
+    videos.forEach(function (v, i) {
       var meta = [v.channel, v.published].filter(Boolean).join(' · ');
       html +=
-        '<a class="video-row" href="' + escAttr(v.url) + '" target="_blank" rel="noopener">' +
+        '<a class="video-row" href="' + escAttr(v.url) + '" target="_blank" rel="noopener"' +
+          clickAttrs('video', v.url, v.title || '', v.click_position || (i + 1), v.click_token || '') + '>' +
           '<div class="video-thumb' + (v.thumbnail ? '' : ' is-empty') + '">' +
             (v.thumbnail
               ? '<img src="' + escAttr(v.thumbnail) + '" alt="" loading="lazy" ' +
@@ -980,12 +1293,13 @@
         '<div class="news-heading">In the news</div>' +
         '<div class="news-grid">';
 
-    news.forEach(function (n) {
+    news.forEach(function (n, i) {
       var domain = domainOf(n.url);
       var favicon = 'https://www.google.com/s2/favicons?sz=16&domain=' + encodeURIComponent(domain);
       var timeAgo = n.date ? relativeTime(n.date) : '';
       html +=
-        '<a class="news-card" href="' + escAttr(n.url) + '" target="_blank" rel="noopener">' +
+        '<a class="news-card" href="' + escAttr(n.url) + '" target="_blank" rel="noopener"' +
+          clickAttrs('news', n.url, n.title || '', n.click_position || (i + 1), n.click_token || '') + '>' +
           (n.image
             ? '<div class="news-card-img"><img src="' + escAttr(n.image) + '" alt="" loading="lazy" onerror="this.parentElement.style.display=\'none\'"></div>'
             : '') +
@@ -1003,10 +1317,16 @@
     return html + '</div></section>';
   }
 
-  function buildResultCard(r) {
+  function buildResultCard(r, position) {
     var domain     = domainOf(r.url);
     var breadcrumb = makeBreadcrumb(r.url);
     var favicon    = 'https://www.google.com/s2/favicons?sz=16&domain=' + encodeURIComponent(domain);
+    var clicks     = parseInt(r.click_count || 0, 10) || 0;
+    var activePos  = parseInt(r.click_position || position || 0, 10) || 0;
+    var badge      = clicks > 0
+      ? '<div class="result-popularity">🔥 Popular on 8search · ' + clicks +
+          ' click' + (clicks === 1 ? '' : 's') + '</div>'
+      : '';
 
     return (
       '<div class="result-item">' +
@@ -1016,9 +1336,11 @@
           '<span class="result-breadcrumb">' + esc(breadcrumb) + '</span>' +
           (r.source ? '<span class="result-source">' + esc(r.source) + '</span>' : '') +
         '</div>' +
-        '<a class="result-title" href="' + escAttr(r.url) + '" target="_blank" rel="noopener">' +
+        '<a class="result-title" href="' + escAttr(r.url) + '" target="_blank" rel="noopener"' +
+          clickAttrs('web', r.url, r.title || '', activePos, r.click_token || '') + '>' +
           esc(r.title || 'Untitled') +
         '</a>' +
+        badge +
         '<div class="result-snippet">' + esc(r.snippet || '') + '</div>' +
       '</div>'
     );

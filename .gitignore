@@ -7,4 +7,6 @@ backend/data/
 *.db-shm
 *.db-wal
 *.db-journal
+.click_secret
+data/.click_secret
 .env

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#141416">
+  <title>Make 8search Your Default Search Engine</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=20261116-2">
+  <style>
+    .default-guide {
+      max-width: 720px;
+      margin: 60px auto;
+      padding: 32px 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+    }
+    .default-guide h1 {
+      font-size: 1.8rem;
+      margin: 0 0 12px;
+      color: var(--text-color);
+    }
+    .default-guide p {
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .browser-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-top: 24px;
+    }
+    .browser-card {
+      padding: 18px 20px;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .browser-card h3 {
+      margin: 0 0 10px;
+      font-size: 1.1rem;
+      color: var(--text-color);
+    }
+    .browser-card ol {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .browser-card ol li {
+      margin-bottom: 6px;
+    }
+    .code-pill {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 0.85em;
+      color: var(--link);
+      user-select: all;
+    }
+    .btn-home {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 32px;
+      padding: 10px 20px;
+      background: var(--green-8);
+      color: #fff;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .btn-home:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body class="landing-page">
+  <header class="top-bar">
+    <a href="/" class="top-bar-logo"><span class="logo-8">8</span>search</a>
+  </header>
+
+  <main class="default-guide">
+    <h1>Make 8search Your Default Search Engine</h1>
+    <p>Search the web with answer-first answers, Wikipedia cards, real news, and an interactive satellite globe directly from your browser's address bar.</p>
+
+    <div class="browser-steps">
+      <div class="browser-card">
+        <h3>Google Chrome / Brave / Edge</h3>
+        <ol>
+          <li>Open <strong>Settings</strong> &rarr; <strong>Search engine</strong> &rarr; <strong>Manage search engines and site search</strong>.</li>
+          <li>Under <em>Site search</em>, click <strong>Add</strong>.</li>
+          <li>Enter Name: <span class="code-pill">8search</span></li>
+          <li>Shortcut: <span class="code-pill">8</span></li>
+          <li>URL with %s in place of query: <span class="code-pill">__SEARCH_URL__</span></li>
+          <li>Click <strong>Add</strong>, then click the three dots next to 8search and choose <strong>Make default</strong>.</li>
+        </ol>
+      </div>
+
+      <div class="browser-card">
+        <h3>Mozilla Firefox</h3>
+        <ol>
+          <li>Visit <a href="__BASE_URL__" style="color:var(--link);">8search homepage</a>.</li>
+          <li>Right-click the address bar and select <strong>Add "8search"</strong>.</li>
+          <li>Open <strong>Settings</strong> &rarr; <strong>Search</strong> and select <strong>8search</strong> as your Default Search Engine.</li>
+        </ol>
+      </div>
+
+      <div class="browser-card">
+        <h3>Safari (macOS / iOS)</h3>
+        <ol>
+          <li>You can bookmark 8search or set <span class="code-pill">__BASE_URL__</span> as your Homepage in <strong>Safari Settings</strong> &rarr; <strong>General</strong>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <a href="/" class="btn-home">&larr; Back to 8search</a>
+  </main>
+</body>
+</html>

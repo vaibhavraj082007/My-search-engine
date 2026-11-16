@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A next-generation search engine with a live interactive satellite globe.</b><br/>
-  Search the web like Google · Explore the Earth like Google Earth · See live weather anywhere with one click.
+  Search the web like Google · Explore the Earth like Google Earth.
 </p>
 
 <p align="center">
@@ -29,23 +29,16 @@
 - **Every user gets 4 free searches without signing in.**
 - After 4 searches → a friendly prompt asks the user to **log in or create a free account**.
 - Once logged in → **unlimited searches, forever, no limits.**
+- **Click-popularity ranking:** links people open most for a query rise to the top, with position-bias correction and time decay.
 - Powered by your own crawler and full-text search index — you control what's indexed.
 
-### 🌐 The Globe — Click Anywhere on Earth
+### 🌐 The Globe — Interactive 3D Earth
 
-Right below the search bar sits a **3D satellite globe** that users can spin, zoom, and click:
-
-| Click anywhere on the globe and instantly see: |
-| --- |
-| 🌡️ **Live Temperature** — current reading at that exact spot |
-| 🌤️ **Weather Condition** — clear, cloudy, rain, snow, storm, etc. |
-| 💨 **Wind Speed & Direction** — with an animated arrow showing wind flow |
-| 🌧️ **Rain / Precipitation** — current and forecasted |
-| ☁️ **Cloud Cover** — percentage of sky covered |
-| 🕐 **Live Local Time** — the real-time clock of the clicked location |
-| 📅 **16-Day Forecast** — daily highs, lows, and conditions (days 10–16 dimmed as estimates) |
-
-All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free, no API key needed.
+Right below the search bar sits a **3D satellite globe** that users can spin and zoom:
+- **3D Globe / Flat map** toggle
+- **Satellite / Street imagery** toggle
+- **Live USGS Earthquake overlay** showing recent seismic activity
+- **Current Location Weather**: quick shortcut on the homepage shows the live forecast for your current location.
 
 ---
 
@@ -54,12 +47,10 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 | Feature | Guest (no login) | Logged-in User |
 | --- | :---: | :---: |
 | Web search | ✅ 4 searches | ✅ **Unlimited** |
+| Click-popularity ranking (learns from result clicks) | ✅ | ✅ |
 | URL navigation (like Chrome) | ✅ | ✅ |
 | Interactive satellite globe | ✅ | ✅ |
-| Click-anywhere live weather | ✅ | ✅ |
-| Live local time of any place | ✅ | ✅ |
-| Wind speed & direction | ✅ | ✅ |
-| 16-day forecast | ✅ | ✅ |
+| Current location live weather | ✅ | ✅ |
 | Earthquake overlay (USGS) | ✅ | ✅ |
 | Globe/Flat & Map/Satellite toggle | ✅ | ✅ |
 | Search history & preferences | ❌ | ✅ |
@@ -76,9 +67,9 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 │                                                         │
 │               ┌──────────────────────┐                  │
 │              /    🌐 SATELLITE GLOBE   \                │
-│             /   Click anywhere for live \               │
-│            |    weather, temp, wind &    |              │
-│            |    local time of that spot  |              │
+│             /   Spin and zoom the 3D    \               │
+│            |    Earth with satellite &   |              │
+│            |    earthquake layers        |              │
 │             \                          /               │
 │              \                        /                │
 │               └──────────────────────┘                  │
@@ -97,7 +88,7 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 │   ├── index.html               # Main page: search bar + globe
 │   ├── style.css                # Colours, layout, dark theme
 │   ├── app.js                   # Search logic, login state, UTC clock
-│   ├── map.js                   # Globe, weather panel, click handler
+│   ├── map.js                   # Globe, map layers, current weather panel
 │   ├── lens.js                  # In-app camera, QR scanning, OCR, Lens panel
 │   ├── vendor/jsQR.js           # Local QR fallback decoder
 │   ├── login.html               # Login page
@@ -107,13 +98,18 @@ All weather data is **live** from [Open-Meteo](https://open-meteo.com/) — free
 │   ├── main.py                  # App entry point, routes, CORS, static files
 │   ├── auth.py                  # User accounts (salted password hashing)
 │   ├── search_api.py            # Search endpoint (full-text search)
+│   ├── ranking.py               # Click normalisation, decay, position bias, ordering
+│   ├── clicks.py                # Click storage, HMAC tokens, anti-abuse, /api/click
 │   ├── searchdb.py              # Search index database
 │   ├── crawler.py               # Web crawler (respects robots.txt)
-│   ├── weather_api.py           # Weather proxy (Open-Meteo, 15-min cache)
 │   ├── lens.py                  # /api/solve (SymPy) and /api/translate
-│   └── data/                    # Auto-created: SQLite databases
+│   └── data/                    # (legacy location; runtime data lives in ../data)
 │
+├── data/                        # Auto-created: users, search, feedback, clicks SQLite DBs
+├── tests/                       # pytest suite for ranking and click anti-abuse
+├── scripts/seed_clicks.py       # Demo click data for the ranking
 ├── requirements.txt             # Python dependencies
+├── requirements-dev.txt         # Test dependencies (pytest)
 └── README.md                    # ← You are here
 ```
 
@@ -152,7 +148,7 @@ uvicorn backend.main:app --reload
 
 👉 **http://localhost:8000**
 
-That's it. Search, spin the globe, click anywhere for live weather.
+That's it. Search, spin the globe, and explore the Earth.
 
 ---
 
@@ -169,7 +165,14 @@ That's it. Search, spin the globe, click anywhere for live weather.
 5. **In the news** — recent articles and images when available.
 
 Every enrichment is fetched independently, so a missing Wikipedia article or
-video section never breaks the rest of the page.
+video section never breaks the rest of the page. Providers are raced against a
+short time window, so one slow source cannot hold up the page.
+
+Repeat searches are served from a 5-minute server cache and the browser's
+session cache. Going back to an earlier query is instant (typically 20–60 ms
+with no network call). A **cold** live-web search still takes roughly a second
+because the third-party providers must be queried; no search engine can return
+fresh live-web results in literal milliseconds.
 
 ### Indexing Pages (optional local index)
 
@@ -198,6 +201,109 @@ After crawling, matching pages are merged into web results.
 - **High-traffic protection:** per-IP API limiting, shared caching, and bounded
   upstream concurrency keep the site responsive under load. See
   [SCALING.md](SCALING.md) for the production path to 500k users.
+
+---
+
+## 🔥 Click-Popularity Ranking
+
+8search learns from the results people actually open. For each query it keeps
+aggregate click statistics per URL and uses them to re-order the merged result
+list. A result with real clicks moves above results nobody clicks; results with
+no data keep the search provider's original order, so a brand-new query behaves
+exactly as before.
+
+### How it works
+
+1. **Normalise.** Queries are lowercased, Unicode-normalised, punctuation-free,
+   and whitespace-collapsed (`NMIMS`, `nmims`, and `N.M.I.M.S` share one key).
+   URLs are lowercased, stripped of `www.`, tracking parameters, fragments, and
+   trailing slashes, with `http`/`https` unified.
+2. **Count impressions.** Every `/api/search` response records one impression
+   per returned web, video, and news URL. Writes are buffered and flushed in
+   batches, never on the request path.
+3. **Accept only real clicks.** Each result carries a short-lived HMAC token
+   binding the query, URL, kind, and displayed position. `POST /api/click`
+   rejects missing/expired/forged tokens, and a URL that was not shown cannot be
+   clicked. Web, video, news, Wikipedia, and quick-answer clicks use separate
+   stats namespaces, so the always-on answer cards cannot boost web links.
+4. **Correct for position bias.** A click at position 8 is worth more than a
+   click at position 1 because top slots get accidental clicks. The weight is
+   `expected_ctr(1) / expected_ctr(position)`, capped at about 5×.
+5. **Decay and smooth.** Clicks decay exponentially with a 30-day half-life.
+   The score is `(decayed_weighted_clicks + prior_clicks * prior_rate) /
+   (impressions + prior_impressions)`, so one lucky click cannot beat a result
+   with many clicks.
+6. **Re-rank after the cache.** The five-minute cache stores the raw provider
+   payload, never the ranked order. Ranking runs on every request, so a click
+   changes the next search immediately. Ties and cold-start results fall back
+   to the provider order.
+
+A small global URL boost helps a generally popular result beat an unknown one
+when the query itself has no data for either. All constants are in
+`backend/ranking.py` and can be overridden with environment variables.
+
+### Privacy and anti-abuse
+
+- Only salted one-way hashes of IP addresses, user agents, sessions, and (for
+  logged-in users) account identifiers are stored. Raw IPs are never written.
+- A session can count the same query + URL at most once per hour.
+- Per-IP and per-session click rate limits sit on top of the global API limiter.
+- Known crawler/bot user agents are ignored.
+- Click history is never exposed to other users. `/api/popular` returns only
+  aggregate counts; `/api/ranking/debug` requires `RANKING_DEBUG_TOKEN`.
+
+### Endpoints
+
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/api/search?q=...` | GET | Adds `rank_source`, `click_count`, `popularity_score`, `click_position`, and `click_token` to results |
+| `/api/click` | POST | Record a clicked result; returns `204` immediately and writes in a background task |
+| `/api/popular?q=...` | GET | Top clicked URLs for a query (`kind=web\|video\|news\|answer\|wiki`) |
+| `/api/ranking/debug?q=...&token=...` | GET | Protected config + click stats for debugging |
+
+### Demo data
+
+Use the seed script to make the effect visible while developing:
+
+```bash
+python scripts/seed_clicks.py --query nmims \
+  --click https://www.nmims.edu/ \
+  --click https://en.wikipedia.org/wiki/Narsee_Monjee_Institute_of_Management_Studies
+
+python scripts/seed_clicks.py --query nmims --show
+```
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+./venv/bin/pytest -q
+```
+
+### Ranking configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CLICKS_DB_PATH` | `data/clicks.db` | Click SQLite database |
+| `CLICK_TOKEN_SECRET` | generated in `data/.click_secret` | HMAC key; set the same value on every replica |
+| `CLICK_SECRET_PATH` | `data/.click_secret` | Where the generated HMAC key is stored when the secret is not set |
+| `CLICK_TOKEN_TTL_SECONDS` | `21600` | Signed click-token lifetime |
+| `CLICK_DEDUPE_SECONDS` | `3600` | Same session/query/URL dedupe window |
+| `CLICK_RATE_PER_MINUTE` | `60` | Per-IP click reports per minute |
+| `CLICK_SESSION_RATE_PER_MINUTE` | `20` | Per-session click reports per minute |
+| `CLICK_HALF_LIFE_DAYS` | `30` | Exponential click decay |
+| `MAX_POSITION_WEIGHT` | `5` | Cap on position-bias correction |
+| `RANK_PRIOR_CLICKS` | `1` | Smoothing prior clicks |
+| `RANK_PRIOR_CLICK_RATE` | `0.05` | Smoothing prior click rate |
+| `RANK_PRIOR_IMPRESSIONS` | `10` | Smoothing prior impressions |
+| `RANK_GLOBAL_BOOST_WEIGHT` | `0.002` | Boost for globally popular URLs with no query data |
+| `RANK_GLOBAL_BOOST_REFERENCE_CLICKS` | `100` | Global click count that earns the full boost |
+| `CLICK_RETENTION_DAYS` | `90` | Raw click-event retention |
+| `CLICK_CLEANUP_INTERVAL_SECONDS` | `21600` | Decay/prune job cadence |
+| `IMPRESSION_FLUSH_SECONDS` | `5` | Impression batch flush interval |
+| `IMPRESSION_BATCH_SIZE` | `200` | Buffered impression keys that trigger an early flush |
+| `RANKING_DEBUG` | `0` | Set `1` to log rank details |
+| `RANKING_DEBUG_TOKEN` | unset | Enables `/api/ranking/debug` |
 
 ---
 
@@ -243,7 +349,7 @@ browser; only the text you choose to solve or translate is sent to the server.
 
 ---
 
-## 🌐 The Globe — Live Weather on Click
+## 🌐 The Globe — Interactive Satellite Map
 
 The satellite globe is the centrepiece of 8search. It sits directly below the search bar.
 
@@ -253,27 +359,9 @@ The satellite globe is the centrepiece of 8search. It sits directly below the se
 | --- | --- |
 | 🖱️ Drag | Spin the globe |
 | 🔄 Scroll | Zoom in / out |
-| 👆 Click anywhere | Weather panel for that location |
 | `Globe / Flat` button | Toggle 3D globe or flat map |
 | `Map / Satellite` button | Toggle street map or satellite imagery |
 | `Earthquakes` button | Show last 24 hours of M2.5+ earthquakes (USGS) |
-
-### What the Weather Panel Shows
-
-When you click **any point** on the globe:
-
-| Data | Source | Update Frequency |
-| --- | --- | --- |
-| Temperature (°C/°F) | Open-Meteo | Live (cached 15 min) |
-| Weather condition | Open-Meteo | Live |
-| Wind speed (km/h) | Open-Meteo | Live |
-| Wind direction (arrow) | Open-Meteo | Live |
-| Rain / precipitation | Open-Meteo | Live |
-| Cloud cover (%) | Open-Meteo | Live |
-| **Live local time** | Calculated from longitude | **Real-time (ticking clock)** |
-| 16-day forecast | Open-Meteo | Daily |
-
-> **Note:** Days 10–16 in the forecast are dimmed because long-range predictions are rough estimates. No free weather service forecasts beyond 16 days reliably.
 
 ---
 
@@ -284,12 +372,15 @@ When you click **any point** on the globe:
 | Sign up / sign in | Email + password (8+ characters) |
 | Password storage | bcrypt hash only (never plain text) |
 | Password reset | Single-use emailed link, valid for 30 minutes |
+| Signup welcome | Account-ready email after the first signup |
 | Login alerts | Formal security email after every successful sign-in |
+| Sign-out notice | Confirmation email after signing out |
+| Help path | Every security email includes an "if this wasn't you" link that opens an email to `FEEDBACK_EMAIL` |
 | Feedback | Form at the bottom of the site emails submissions to the owner |
 | Data location | Local SQLite in `data/` |
 | Session | HttpOnly cookie (30 days) |
 
-### ✉️ Email setup (password reset, login alerts & feedback)
+### ✉️ Email setup (welcome, sign-in, sign-out, reset & feedback)
 
 Copy `backend/.env.example` to `backend/.env` and fill in your SMTP details:
 
@@ -310,6 +401,8 @@ Copy `backend/.env.example` to `backend/.env` and fill in your SMTP details:
 
 > **Feedback:** submissions from the form at the bottom of the homepage are saved to `data/feedback.db` and emailed to `FEEDBACK_EMAIL`. Each IP address has a 30-second cooldown.
 
+> **Account emails:** signup, sign-in, and sign-out notices include the time, IP address, device, and a support link; sign-in alerts also include a password-reset link. Emails are sent after the response, so an SMTP outage never blocks signup, login, logout, or feedback.
+
 Accounts unlock **unlimited searches** and will power future features like search history, bookmarks, and personalized globe settings.
 
 ---
@@ -322,10 +415,12 @@ Key endpoints:
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
-| `/api/search?q=...` | GET | Answer-first web search (cached, rate-limited) |
+| `/api/search?q=...` | GET | Answer-first web search (cached, rate-limited, click-ranked) |
+| `/api/click` | POST | Record a clicked result (HMAC token, background write, `204`) |
+| `/api/popular?q=...` | GET | Top clicked URLs for a query |
+| `/api/ranking/debug?q=...&token=...` | GET | Protected ranking diagnostics |
 | `/api/solve` | POST | Solve math/equations from recognized text (SymPy, with steps) |
 | `/api/translate` | POST | Translate recognized text into a chosen language |
-| `/api/weather?lat=...&lon=...` | GET | Live weather for coordinates |
 | `/api/signup` | POST | Create account |
 | `/api/login` | POST | Log in (sends a sign-in alert email) |
 | `/api/logout` | POST | Log out |
@@ -345,7 +440,6 @@ Key endpoints:
 | `command not found: python3` | Install Python 3.9+ from [python.org](https://www.python.org/downloads/) |
 | `No module named fastapi` | Activate the venv: `source venv/bin/activate` |
 | Blank globe | Open browser console (Cmd+Option+J) and check for errors |
-| `502` on weather | Open-Meteo is temporarily unreachable |
 | Camera button shows "Camera unavailable" | Allow camera access for the site, or upload a photo instead. `getUserMedia` requires HTTPS or `localhost`. |
 | OCR does not start | Tesseract.js is loaded from jsDelivr on first use — check the internet connection and any content blockers. |
 | Math answer says "No solvable math expression" | Keep the equation in the frame and avoid glare; retake the photo or type it into the search bar. |
@@ -357,11 +451,11 @@ Key endpoints:
 > [!IMPORTANT]
 > The current setup is designed for **local development and learning**. Before deploying to real users:
 
-- **Database:** SQLite is fine for one host. Move users/sessions/reset tokens to Postgres before running multiple app replicas.
+- **Database:** SQLite is fine for one host. Move users/sessions/reset tokens and the click store to Postgres before running multiple app replicas.
+- **Click ranking:** set `CLICK_TOKEN_SECRET` to the same value on every replica and move click events/stats to shared storage. See [SCALING.md](SCALING.md).
 - **Search provider:** DuckDuckGo/Bing HTML and RSS endpoints are demo-grade. Use a paid search API with an SLA for real traffic.
 - **YouTube:** scraping results pages will be blocked at scale. Use the YouTube Data API.
 - **Map tiles:** OpenStreetMap and Esri tiles have usage limits. Switch to a commercial tile provider for heavy traffic.
-- **Weather API:** Open-Meteo is free for **non-commercial use only**. Review their [terms](https://open-meteo.com/en/terms).
 - **Authentication:** Add HTTPS, rate-limit failed logins, and consider OAuth for production.
 - **Crawler:** Maintain the 1-second delay and always respect `robots.txt`.
 
@@ -375,19 +469,16 @@ math, environment variables, and load-test instructions.
 - [x] Full-text web search with own crawler
 - [x] 4-search guest limit → login for unlimited
 - [x] Interactive satellite globe below search bar
-- [x] Click-anywhere live weather (temp, wind, rain, clouds)
-- [x] Live local time of clicked location
-- [x] 16-day forecast
 - [x] Earthquake overlay (USGS)
 - [x] In-app Lens camera: QR, OCR, homework solving, translation
 - [x] User accounts with secure password hashing
+- [x] Click-popularity ranking (Google-style learning from result clicks)
 - [ ] Search suggestions / autocomplete
 - [ ] Search history for logged-in users
 - [ ] Bookmarked locations on the globe
 - [ ] Dark / light theme toggle
 - [ ] Mobile-responsive globe
 - [ ] Air quality index overlay
-- [ ] Sunrise / sunset times in weather panel
 
 ---
 
@@ -398,5 +489,5 @@ MIT — see [LICENSE](LICENSE) for details.
 ---
 
 <p align="center">
-  <b>8search</b> — Search the web. Explore the world. See live weather anywhere. 🌍
+  <b>8search</b> — Search the web. Explore the world. 🌍
 </p>

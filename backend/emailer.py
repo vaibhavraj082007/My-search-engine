@@ -342,7 +342,7 @@ def send_welcome_email(to_email: str, when: str, ip_address: str, user_agent: st
         f"IP address: {ip_address}\n"
         f"Device: {user_agent}\n\n"
         "You can now sign in for unlimited searches, saved history, images,\n"
-        "news, weather, maps, and the in-app camera tools.\n\n"
+        "news, maps, and the in-app camera tools.\n\n"
         f"Start searching: {home_link}\n\n"
         "If you didn't create this account, or you need help, contact 8search support:\n"
         f"{support_href}\n\n"
@@ -357,7 +357,7 @@ def send_welcome_email(to_email: str, when: str, ip_address: str, user_agent: st
 {_details_block([("Created", when), ("IP address", ip_address), ("Device", user_agent)])}
 <p style="margin:0 0 14px;">
   You can now sign in for unlimited searches, saved history, images, news,
-  weather, maps, and the in-app camera tools.
+  maps, and the in-app camera tools.
 </p>
 {_action_buttons("Start searching", home_link, support_href)}
 """

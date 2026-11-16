@@ -1,7 +1,8 @@
 """8search API – main FastAPI application."""
 
+import asyncio
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,18 +10,22 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, feedback, searchdb
+from . import auth, clicks, feedback, news, searchdb, suggestions
 from .answers import close_http_client
 from .cache import cache
 from .lens import router as lens_router
-from .ratelimit import limiter
+from .ratelimit import RateLimiter, limiter
 from .search_api import router as search_router
-from .weather_api import router as weather_router
+from .webapp import router as webapp_router
 
 STATIC_CACHE_EXTENSIONS = {
     ".css", ".js", ".mjs", ".png", ".jpg", ".jpeg", ".gif", ".webp",
     ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf", ".map",
+    ".webmanifest",
 }
+
+SUGGEST_RATE_LIMIT_PER_MINUTE = int(os.getenv("SUGGEST_RATE_LIMIT_PER_MINUTE", "600"))
+suggest_limiter = RateLimiter(limit=SUGGEST_RATE_LIMIT_PER_MINUTE)
 
 
 @asynccontextmanager
@@ -29,11 +34,24 @@ async def lifespan(app: FastAPI):
     auth.init_db()
     feedback.init_db()
     searchdb.init_db()
+    clicks.init_db()
+    suggestions.init_db()
+    news.init_db()
     await cache.start()
     limiter.redis = cache.redis
+    suggest_limiter.redis = cache.redis
+    clicks.click_ip_limiter.redis = cache.redis
+    clicks.click_session_limiter.redis = cache.redis
+    maintenance_task = clicks.start_maintenance()
+    news.start_scheduler()
     try:
         yield
     finally:
+        maintenance_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await maintenance_task
+        await news.stop_scheduler()
+        clicks.flush_impressions()
         await cache.close()
         await close_http_client()
 
@@ -61,7 +79,11 @@ async def response_headers(request: Request, call_next):
     path = request.url.path
     extension = os.path.splitext(path)[1].lower()
 
-    if path.startswith("/api/") or path in {"/health", "/ready"}:
+    if path.startswith("/api/"):
+        # News and suggestions deliberately set their own public cache headers.
+        if not response.headers.get("cache-control"):
+            response.headers["Cache-Control"] = "no-store"
+    elif path in {"/health", "/ready"}:
         response.headers["Cache-Control"] = "no-store"
     elif extension in STATIC_CACHE_EXTENSIONS:
         if "v=" in request.url.query:
@@ -73,6 +95,14 @@ async def response_headers(request: Request, call_next):
 
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    proto = request.url.scheme
+    if os.getenv("TRUST_PROXY", "0") == "1":
+        proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip() or proto
+    if proto == "https" or os.getenv("FORCE_HTTPS", "0") == "1":
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     return response
 
 
@@ -87,7 +117,11 @@ def _client_ip(request: Request) -> str:
 @app.middleware("http")
 async def rate_limit_api(request: Request, call_next):
     if request.url.path.startswith("/api/") and request.method != "OPTIONS":
-        if not await limiter.allow(f"api:{_client_ip(request)}"):
+        path = request.url.path
+        is_suggest = path == "/api/suggest"
+        limiter_to_use = suggest_limiter if is_suggest else limiter
+        bucket = "suggest" if is_suggest else "api"
+        if not await limiter_to_use.allow(f"{bucket}:{_client_ip(request)}"):
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Too many requests. Please slow down and try again shortly."},
@@ -110,14 +144,18 @@ async def ready():
 
 # Include API routers
 app.include_router(auth.router)
+app.include_router(clicks.router)
 app.include_router(feedback.router)
 app.include_router(lens_router)
 app.include_router(search_router)
-app.include_router(weather_router)
+app.include_router(suggestions.router)
+app.include_router(news.router)
+app.include_router(webapp_router)
 
 # Mount frontend static files – served at "/" with html=True so
 # index.html is served for the root path and other .html files
-# are served by their path.
+# are served by their path. Browser-facing routes above must stay
+# registered before this mount.
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

@@ -17,10 +17,10 @@ import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from fastapi import APIRouter, Cookie, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Query, Request, Response
 from starlette.concurrency import run_in_threadpool
 
-from . import searchdb
+from . import clicks, ranking, searchdb, suggestions
 from .answers import (
     build_answer,
     get_http_client,
@@ -29,7 +29,7 @@ from .answers import (
     get_wikipedia,
     get_wiktionary,
 )
-from .auth import get_current_user
+from .auth import cookie_secure, get_current_user
 from .cache import cache
 
 router = APIRouter()
@@ -37,8 +37,58 @@ router = APIRouter()
 # Simple regex: has a "." but no spaces → treat as URL
 _URL_PATTERN = re.compile(r"^[^\s]+\.[^\s]+$")
 _WHITESPACE = re.compile(r"\s+")
+_SCHEME_PATTERN = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
 GUEST_SEARCH_LIMIT = 4
+MAX_QUERY_LENGTH = 500
+VALID_TABS = {"web", "ai", "images", "code"}
+
+
+def _guest_limit() -> int:
+    try:
+        return max(1, int(os.getenv("GUEST_SEARCH_LIMIT", str(GUEST_SEARCH_LIMIT))))
+    except (TypeError, ValueError):
+        return GUEST_SEARCH_LIMIT
+
+
+def _direct_navigation_url(query: str) -> str | None:
+    """Return a safe http(s) URL for URL-like input, else None.
+
+    This is deliberately stricter than "looks like a domain": only http and
+    https may ever become a redirect target, so javascript:/data: input is
+    treated as a normal search instead.
+    """
+    candidate = (query or "").strip()
+    if not candidate:
+        return None
+    if _SCHEME_PATTERN.match(candidate):
+        parsed = urlparse(candidate)
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            return None
+        return candidate
+    if not _URL_PATTERN.match(candidate):
+        return None
+    parsed = urlparse("https://" + candidate)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return None
+    return "https://" + candidate
+
+
+def _limit_payload(query: str, tab: str) -> dict:
+    safe_tab = tab if tab in VALID_TABS else "web"
+    next_path = f"/search?q={quote(query, safe='')}"
+    if safe_tab != "web":
+        next_path += f"&tab={safe_tab}"
+    encoded_next = quote(next_path, safe="")
+    return {
+        "results": [], "news": [], "answer": None, "wikipedia": None,
+        "videos": [], "total": 0, "page": 1,
+        "limit_reached": True,
+        "guest_limit": _guest_limit(),
+        "login_url": "/login?next=" + encoded_next,
+        "signup_url": "/signup?next=" + encoded_next,
+        "message": "Please sign in for unlimited searches",
+    }
 
 RESULTS_PER_PAGE = max(1, min(10, int(os.getenv("RESULTS_PER_PAGE", "10"))))
 MAX_SEARCH_PAGE = max(1, int(os.getenv("MAX_SEARCH_PAGE", "10")))
@@ -890,13 +940,16 @@ def _wiki_chunk_key(query: str, page: int) -> str:
 @router.get("/api/search")
 async def search(
     response: Response,
-    q: str = Query("", min_length=0, max_length=400),
+    background: BackgroundTasks,
+    request: Request,
+    q: str = Query("", min_length=0, max_length=2000),
     page: int = Query(1, ge=1, le=MAX_SEARCH_PAGE),
+    tab: str = Query("web"),
     session_token: str | None = Cookie(default=None),
     guest_id: str | None = Cookie(default=None),
     guest_searches: str | None = Cookie(default=None),
 ):
-    query = q.strip()
+    query = q.strip()[:MAX_QUERY_LENGTH]
     if not query:
         return {
             "results": [], "news": [], "answer": None, "wikipedia": None,
@@ -906,31 +959,37 @@ async def search(
 
     user = await run_in_threadpool(get_current_user, session_token)
     is_guest = user is None
+    safe_tab = tab if tab in VALID_TABS else "web"
 
-    # URL detection – navigate directly
-    if _URL_PATTERN.match(query):
-        url = query if query.startswith(("http://", "https://")) else f"https://{query}"
-        return {"redirect": url}
+    # URL detection – navigate directly, but only to http(s).
+    redirect_url = _direct_navigation_url(query)
+    if redirect_url:
+        return {"redirect": redirect_url}
 
     # Guest rate-limiting. Only a brand-new search (page 1) consumes quota;
     # paging through results the guest already unlocked must stay free.
     if is_guest:
+        secure_cookie = cookie_secure(request)
         if not guest_id:
             guest_id = uuid.uuid4().hex
             response.set_cookie(key="guest_id", value=guest_id,
-                                httponly=True, samesite="lax", max_age=86400, path="/")
+                                httponly=True, samesite="lax", secure=secure_cookie,
+                                max_age=86400, path="/")
 
         if page == 1:
-            count = int(guest_searches or "0")
-            if count >= GUEST_SEARCH_LIMIT:
-                return {
-                    "results": [], "news": [], "answer": None, "wikipedia": None,
-                    "videos": [], "total": 0, "page": 1,
-                    "limit_reached": True,
-                    "message": "Please sign in for unlimited searches",
-                }
+            try:
+                count = int(guest_searches or "0")
+            except (TypeError, ValueError):
+                count = 0
+            if count >= _guest_limit():
+                return _limit_payload(query, safe_tab)
             response.set_cookie(key="guest_searches", value=str(count + 1),
-                                httponly=False, samesite="lax", max_age=86400, path="/")
+                                httponly=False, samesite="lax", secure=secure_cookie,
+                                max_age=86400, path="/")
+
+    # Aggregate only the query text for suggestions. This runs after the
+    # response, is PII-filtered and never blocks a search.
+    background.add_task(suggestions.record_query, query)
 
     try:
         payload, cache_hit = await cache.get_or_set(
@@ -950,6 +1009,39 @@ async def search(
         )
 
     response.headers["X-Cache"] = "HIT" if cache_hit else "MISS"
+
+    # Rank every request after the cache read, using the raw provider payload
+    # stored in the cache. New clicks therefore change the order immediately
+    # instead of waiting for the five-minute cache to expire.
+    if isinstance(payload, dict):
+        stats_by_kind = await run_in_threadpool(
+            clicks.fetch_stats,
+            query,
+            {
+                "web": payload.get("results") or [],
+                "video": payload.get("videos") or [],
+                "news": payload.get("news") or [],
+            },
+        )
+        ranked = ranking.rank_payload(
+            payload,
+            query,
+            stats_by_kind,
+            token_factory=lambda kind, url, position: clicks.make_click_token(
+                query, url, kind, position
+            ),
+        )
+        if any(
+            isinstance(item, dict) and item.get("rank_source") == "clicks"
+            for item in ranked.get("results") or []
+        ):
+            response.headers["X-Ranked"] = "clicks"
+        clicks.log_ranking(query, ranked)
+        # Buffer impressions off the request path; the periodic flusher writes
+        # them in batches. This never affects guest search quota.
+        background.add_task(clicks.record_page_impressions, query, ranked)
+        return ranked
+
     return payload
 
 

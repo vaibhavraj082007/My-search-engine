@@ -54,6 +54,10 @@ Browser
   are independent. A missing section does not break the page.
 - **Static asset load:** versioned assets are cached for a year; HTML is
   revalidated. Gzip is enabled.
+- **Click popularity:** click impressions are buffered and batched, click
+  reports are written in a background task, and ranking fetches every result's
+  stats in one indexed SQL query. SQLite runs in WAL mode, and a periodic job
+  decays stats and deletes raw click events after 90 days.
 
 ## Sizing math (important)
 
@@ -99,6 +103,15 @@ Autoscale on CPU and request latency, not raw request count.
 7. **Load test:** run k6, Locust, or `scripts/load_test.py` against a staging
    environment that mirrors production. Tune `SEARCH_CONCURRENCY`,
    `RATE_LIMIT_PER_MINUTE`, worker count, and cache TTL from the results.
+8. **Click storage:** `data/clicks.db` is SQLite WAL, which is fine for one
+   process but is **not shared between replicas**. Move `click_events` and
+   `result_stats` to Postgres (or a column store such as ClickHouse) before
+   running multiple app replicas. Use Redis for the per-IP/per-session click
+   limits and the one-hour dedupe window, set the same `CLICK_TOKEN_SECRET` on
+   every replica so signed tokens verify everywhere, and keep the ranking read
+   as one indexed query. The equivalent Postgres index is
+   `(query_norm, position_weighted_clicks DESC)`. The in-process impression
+   buffer also becomes per-replica; batch into a queue or a shared table.
 
 ## Environment variables
 
@@ -128,6 +141,14 @@ Autoscale on CPU and request latency, not raw request count.
 | `DDGS_VIDEO_CONCURRENCY` | `3` | Blocking video fallbacks allowed at once |
 | `DDGS_VIDEO_TIMEOUT` | `4` | Hard timeout for a video fallback |
 | `RATE_LIMIT_PER_MINUTE` | `120` | Per-IP API requests per minute (`0` disables) |
+| `CLICKS_DB_PATH` | `data/clicks.db` | Click SQLite database |
+| `CLICK_TOKEN_SECRET` | generated `data/.click_secret` | Shared HMAC key for click tokens (required across replicas) |
+| `CLICK_HALF_LIFE_DAYS` | `30` | Click decay half-life |
+| `MAX_POSITION_WEIGHT` | `5` | Cap on position-bias correction |
+| `CLICK_DEDUPE_SECONDS` | `3600` | One click per session/query/URL window |
+| `CLICK_RATE_PER_MINUTE` | `60` | Per-IP click reports per minute |
+| `CLICK_SESSION_RATE_PER_MINUTE` | `20` | Per-session click reports per minute |
+| `RANKING_DEBUG_TOKEN` | unset | Enables the protected ranking debug endpoint |
 | `TRUST_PROXY` | `0` | Set `1` behind a trusted load balancer |
 | `ALLOWED_ORIGINS` | `*` | Comma-separated CORS origins |
 | `DISABLE_LOCAL_INDEX` | `0` | Set `1` to skip the local SQLite FTS index |

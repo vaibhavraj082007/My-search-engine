@@ -88,11 +88,6 @@
       layers: [satelliteTiles]
     });
 
-    // Map click → weather
-    map.on('click', function (e) {
-      openWeatherPanel(e.latlng.lat, e.latlng.lng);
-    });
-
     return map;
   }
 
@@ -146,10 +141,52 @@
   }
 
   function fetchWeatherForPanel(lat, lon, container) {
-    var url = '/api/weather?lat=' + lat.toFixed(4) + '&lon=' + lon.toFixed(4);
-    fetch(url, { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' +
+      lat.toFixed(4) + '&longitude=' + lon.toFixed(4) +
+      '&current=temperature_2m,wind_speed_10m,wind_direction_10m,rain,cloud_cover,weather_code,is_day' +
+      '&daily=temperature_2m_max,temperature_2m_min,weather_code,rain_sum,wind_speed_10m_max' +
+      '&forecast_days=16&timezone=auto';
+    fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error('Weather request failed');
+        return r.json();
+      })
+      .then(function (raw) {
+        var currentData = raw.current || {};
+        var dailyData = raw.daily || {};
+        var dates = dailyData.time || [];
+        var tempMaxes = dailyData.temperature_2m_max || [];
+        var tempMins = dailyData.temperature_2m_min || [];
+        var weatherCodes = dailyData.weather_code || [];
+        var rainSums = dailyData.rain_sum || [];
+        var windMaxes = dailyData.wind_speed_10m_max || [];
+
+        var daily = [];
+        for (var i = 0; i < dates.length; i++) {
+          daily.push({
+            date: dates[i],
+            temp_max: tempMaxes[i] !== undefined ? tempMaxes[i] : null,
+            temp_min: tempMins[i] !== undefined ? tempMins[i] : null,
+            weather_code: weatherCodes[i] !== undefined ? weatherCodes[i] : null,
+            rain_sum: rainSums[i] !== undefined ? rainSums[i] : null,
+            wind_speed_max: windMaxes[i] !== undefined ? windMaxes[i] : null
+          });
+        }
+
+        var data = {
+          current: {
+            temperature: currentData.temperature_2m,
+            wind_speed: currentData.wind_speed_10m,
+            wind_direction: currentData.wind_direction_10m,
+            rain: currentData.rain,
+            cloud_cover: currentData.cloud_cover,
+            weather_code: currentData.weather_code,
+            is_day: currentData.is_day
+          },
+          daily: daily,
+          timezone: raw.timezone,
+          utc_offset_seconds: raw.utc_offset_seconds
+        };
         renderWeather(data, lat, lon, container);
       })
       .catch(function () {

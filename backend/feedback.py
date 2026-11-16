@@ -157,7 +157,6 @@ def submit_feedback(
 
     # Email the owner after the response; delivery failures never block the
     # visitor's success message (the submission is already stored above).
-    email_ready = emailer.is_configured()
     background.add_task(
         emailer.send_feedback_notice,
         feedback_id,
@@ -169,10 +168,7 @@ def submit_feedback(
         user_agent,
     )
 
-    return {
-        "message": (
-            "Thanks for your feedback! It has been sent."
-            if email_ready
-            else "Thanks for your feedback! It has been saved."
-        )
-    }
+    # The message is already saved. Email delivery happens after the response,
+    # so do not promise it here — the visitor gets an honest confirmation even
+    # when SMTP is slow or unavailable.
+    return {"message": "Thanks for your feedback! It has been received."}

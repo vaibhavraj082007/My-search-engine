@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#f5f2ec">
+  <meta name="theme-color" content="#141416">
   <title>8search</title>
+  <meta name="description" content="8search is an answer-first search engine with quick answers, real news, and a live globe.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="search" type="application/opensearchdescription+xml" title="8search" href="/opensearch.xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261115-3">
+  <link rel="stylesheet" href="style.css?v=20261116-2">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body class="landing-page">
@@ -36,7 +42,10 @@
 
         <input type="text" id="searchInput" class="search-input"
                placeholder="Search anything or type a calculation…"
-               aria-label="Search" autofocus>
+               aria-label="Search" autofocus
+               role="combobox" aria-autocomplete="list"
+               aria-controls="suggestions" aria-expanded="false"
+               autocomplete="off" spellcheck="false">
 
         <kbd class="search-slash" aria-hidden="true">/</kbd>
 
@@ -62,6 +71,9 @@
             <polyline points="5 12 12 5 19 12"></polyline>
           </svg>
         </button>
+
+        <div id="suggestions" class="suggestions hidden" role="listbox"
+             aria-label="Search suggestions"></div>
       </div>
 
       <!-- Search modes -->
@@ -151,6 +163,12 @@
         <span class="shortcut-label">Add New</span>
       </button>
     </nav>
+
+    <div id="engineBanner" class="engine-banner hidden" role="note">
+      <p><strong>Make 8search your default.</strong> Search the web straight from your address bar.
+        <a href="/set-default">Set it up</a></p>
+      <button type="button" id="engineBannerClose" class="engine-banner-close" aria-label="Dismiss search-engine hint">&times;</button>
+    </div>
   </main>
 
   <!-- Globe / Map Section (revealed from the Maps shortcut) -->
@@ -158,7 +176,7 @@
     <div class="globe-head">
       <div>
         <p class="globe-kicker">Explore the world</p>
-        <h2 class="globe-title">Live globe &amp; weather</h2>
+        <h2 class="globe-title">Live globe</h2>
       </div>
       <button type="button" id="closeGlobeBtn" class="globe-close" aria-label="Close map">&times;</button>
     </div>
@@ -169,6 +187,53 @@
     </div>
     <div id="map" class="map-container"></div>
   </section>
+
+  <!-- Trending News (real publisher feeds, refreshed server-side) -->
+  <section id="trendingNews" class="trending-news" aria-labelledby="trendingNewsTitle">
+    <div class="tn-inner">
+      <header class="tn-head">
+        <div>
+          <p class="tn-kicker">From real publishers</p>
+          <h2 id="trendingNewsTitle" class="tn-title">Trending news</h2>
+        </div>
+        <p id="tnUpdated" class="tn-updated" aria-live="polite">Loading stories…</p>
+      </header>
+
+      <div id="tnChips" class="tn-chips" role="tablist" aria-label="News categories">
+        <button type="button" class="tn-chip active" role="tab" aria-selected="true" data-category="all">Top news</button>
+        <button type="button" class="tn-chip" role="tab" aria-selected="false" data-category="india">India</button>
+        <button type="button" class="tn-chip" role="tab" aria-selected="false" data-category="world">World</button>
+        <button type="button" class="tn-chip" role="tab" aria-selected="false" data-category="technology">Technology</button>
+        <button type="button" class="tn-chip" role="tab" aria-selected="false" data-category="business">Business</button>
+        <button type="button" class="tn-chip" role="tab" aria-selected="false" data-category="science">Science</button>
+        <button type="button" class="tn-chip" role="tab" aria-selected="false" data-category="sports">Sports</button>
+      </div>
+
+      <div id="tnList" class="tn-list" aria-busy="true"></div>
+      <p id="tnStatus" class="tn-status" role="status" aria-live="polite"></p>
+      <p class="tn-attribution">Headlines and summaries are from the linked publishers.</p>
+    </div>
+  </section>
+
+  <!-- Trending News detail modal -->
+  <div id="tnModal" class="tn-modal hidden" role="dialog" aria-modal="true"
+       aria-labelledby="tnModalTitle">
+    <div class="tn-modal-backdrop" id="tnModalBackdrop"></div>
+    <div class="tn-modal-card" role="document">
+      <button type="button" id="tnModalClose" class="tn-modal-close" aria-label="Close story">&times;</button>
+      <div id="tnModalMedia" class="tn-modal-media"></div>
+      <div class="tn-modal-body">
+        <div id="tnModalMeta" class="tn-modal-meta"></div>
+        <h2 id="tnModalTitle" class="tn-modal-title"></h2>
+        <p id="tnModalSummary" class="tn-modal-summary"></p>
+        <div class="tn-modal-foot">
+          <a id="tnModalLink" class="tn-modal-link" target="_blank" rel="noopener noreferrer"></a>
+          <button type="button" id="tnModalDone" class="tn-modal-done">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="tnToast" class="tn-toast hidden" role="status" aria-live="polite"></div>
 
   <!-- Search Results -->
   <section id="resultsSection" class="results-section hidden">
@@ -220,9 +285,11 @@
       <span class="footer-dot" aria-hidden="true">·</span>
       <button type="button" class="footer-link" data-info="terms">Terms</button>
       <span class="footer-dot" aria-hidden="true">·</span>
+      <a class="footer-link footer-default-link" href="/set-default">Set as default search engine</a>
+      <span class="footer-dot" aria-hidden="true">·</span>
       <button type="button" class="footer-link" data-info="about">About</button>
     </nav>
-    <p class="footer-note">Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · Maps by Esri &amp; OpenStreetMap</p>
+    <p class="footer-note">Maps by Esri &amp; OpenStreetMap</p>
   </footer>
 
   <!-- Weather Panel -->
@@ -403,7 +470,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="vendor/jsQR.js?v=20261115-1"></script>
-  <script src="app.js?v=20261115-4"></script>
+  <script src="news.js?v=20261116-1"></script>
+  <script src="app.js?v=20261116-2"></script>
   <script src="map.js?v=20261114-7"></script>
   <script src="lens.js?v=20261115-3"></script>
 </body>
