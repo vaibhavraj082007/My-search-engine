@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in – 8search</title>
-  <link rel="stylesheet" href="style.css?v=20261112-4">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="search" type="application/opensearchdescription+xml" title="8search" href="/opensearch.xml">
+  <link rel="stylesheet" href="style.css?v=20261117-5">
 </head>
 <body class="auth-page">
   <div class="auth-frame">
@@ -87,7 +92,7 @@
           <button type="submit" class="auth-submit" id="submitBtn">Sign in</button>
         </form>
 
-        <p class="auth-switch">New to 8search? <a href="signup.html">Create an account</a></p>
+        <p class="auth-switch">New to 8search? <a href="/signup">Create an account</a></p>
         <p class="auth-secure">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
           Secure sign-in · Passwords are encrypted
@@ -105,10 +110,33 @@
       var errorMsg = document.getElementById('errorMsg');
       var successMsg = document.getElementById('successMsg');
       var submitBtn = document.getElementById('submitBtn');
+      var params = new URLSearchParams(window.location.search);
+
+      // Only same-origin absolute paths are accepted, so ?next= can never be
+      // used as an open redirect.
+      function safeNext(value) {
+        if (!value || value.charAt(0) !== '/' || value.charAt(1) === '/') return '';
+        if (value.indexOf('\\') !== -1) return '';
+        try {
+          var parsed = new URL(value, window.location.origin);
+          if (parsed.origin !== window.location.origin) return '';
+          return parsed.pathname + parsed.search + parsed.hash;
+        } catch (e) {
+          return '';
+        }
+      }
+
+      var next = safeNext(params.get('next'));
+      var switchLink = document.querySelector('.auth-switch a');
+      if (switchLink) {
+        switchLink.href = '/signup' + (next ? '?next=' + encodeURIComponent(next) : '');
+      }
 
       // Show a confirmation when arriving from the reset-password page.
-      if (new URLSearchParams(window.location.search).get('reset') === '1') {
+      if (params.get('reset') === '1') {
         showSuccess('Password updated. Sign in with your new password.');
+      } else if (params.get('signup') === '1') {
+        showSuccess('Account created. Sign in to continue.');
       }
 
       form.addEventListener('submit', function (e) {
@@ -135,7 +163,7 @@
           return r.json();
         })
         .then(function () {
-          window.location.href = '/';
+          window.location.href = next || '/';
         })
         .catch(function (err) {
           setLoading(false);

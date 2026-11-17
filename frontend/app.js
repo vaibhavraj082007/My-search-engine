@@ -22,6 +22,7 @@
   var signinBackdrop  = document.getElementById('signinBackdrop');
   var signinClose     = document.getElementById('signinClose');
   var signinContinue  = document.getElementById('signinContinue');
+  var signinSignup    = document.getElementById('signinSignup');
   var feedbackForm    = document.getElementById('feedbackForm');
   var feedbackName    = document.getElementById('feedbackName');
   var feedbackEmail   = document.getElementById('feedbackEmail');
@@ -40,6 +41,8 @@
   var engineBanner    = document.getElementById('engineBanner');
   var engineBannerClose = document.getElementById('engineBannerClose');
   var trendingNews    = document.getElementById('trendingNews');
+  var trendingPeek    = document.getElementById('trendingPeek');
+  var askAiFab        = document.getElementById('askAiFab');
 
   var currentUser  = null;
   var currentQuery = '';
@@ -131,8 +134,10 @@
         '</div>';
       document.getElementById('logoutBtn').addEventListener('click', handleLogout);
     } else {
-      userArea.innerHTML = '<a href="login.html" class="sign-in-link">Sign in</a>';
+      userArea.innerHTML =
+        '<a href="' + escAttr(authUrl('/login')) + '" class="sign-in-link">Sign in</a>';
     }
+    syncAuthLinks();
   }
 
   function handleLogout() {
@@ -190,12 +195,15 @@
     pagination.innerHTML = '';
     if (globeSection) globeSection.classList.add('hidden');
     if (trendingNews) trendingNews.classList.remove('hidden');
+    if (trendingPeek) trendingPeek.classList.remove('hidden');
     closeSuggestions();
     searchInput.value = '';
     currentQuery = '';
     currentPage  = 1;
     searchSeq    = 0;
+    document.title = '8search';
     setMode('web');
+    syncAuthLinks();
 
     if (pushHistory !== false) {
       try { window.history.pushState({}, '', '/'); } catch (e) {}
@@ -461,6 +469,22 @@
   // ---------- Camera / visual search ----------
   // Handled by lens.js so the camera opens in-app instead of a new tab.
 
+  // ---------- Ask 8search AI floating shortcut ----------
+  if (askAiFab) {
+    askAiFab.addEventListener('click', function () {
+      if (currentQuery) {
+        setMode('ai', { rerun: true });
+      } else {
+        setMode('ai');
+      }
+      try {
+        searchInput.focus({ preventScroll: false });
+      } catch (e) {
+        searchInput.focus();
+      }
+    });
+  }
+
   // ---------- Slash-to-search ----------
   document.addEventListener('keydown', function (e) {
     if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -648,7 +672,7 @@
     else infoDialog.setAttribute('open', '');
   }
 
-  document.querySelectorAll('.footer-link').forEach(function (link) {
+  document.querySelectorAll('.footer-link[data-info]').forEach(function (link) {
     link.addEventListener('click', function () {
       openInfo(link.getAttribute('data-info'));
     });
@@ -672,9 +696,9 @@
   function readRoute() {
     try {
       var params = new URLSearchParams(window.location.search);
-      var q = (params.get('q') || '').trim();
+      var q = (params.get('q') || '').trim().slice(0, MAX_QUERY);
       var page = parseInt(params.get('page') || '1', 10);
-      var mode = params.get('mode') || 'web';
+      var mode = params.get('tab') || params.get('mode') || 'web';
       if (MODES.indexOf(mode) === -1) mode = 'web';
       if (!isFinite(page) || page < 1) page = 1;
       if (page > MAX_PAGE) page = MAX_PAGE;
@@ -689,12 +713,55 @@
       var params = new URLSearchParams();
       params.set('q', query);
       if (page > 1) params.set('page', String(page));
-      if (searchMode && searchMode !== 'web') params.set('mode', searchMode);
-      var url = window.location.pathname + '?' + params.toString();
+      if (searchMode && searchMode !== 'web') params.set('tab', searchMode);
+      var url = '/search?' + params.toString();
       var state = { q: query, page: page, mode: searchMode || 'web' };
       if (historyMode === 'push') window.history.pushState(state, '', url);
       else window.history.replaceState(state, '', url);
     } catch (e) {}
+  }
+
+  function safeNavigationUrl(value) {
+    var raw = (value || '').trim();
+    if (!raw) return null;
+    try {
+      var hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw);
+      var parsed = new URL(hasScheme ? raw : 'https://' + raw);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      if (!parsed.hostname) return null;
+      return parsed.href;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function nextPathForQuery(query, tab, page) {
+    var params = new URLSearchParams();
+    params.set('q', (query || '').slice(0, MAX_QUERY));
+    if (tab && tab !== 'web') params.set('tab', tab);
+    if (page && page > 1) params.set('page', String(page));
+    return '/search?' + params.toString();
+  }
+
+  // Sign-in/sign-up links carry the current search so a guest who hits the
+  // limit (or simply chooses to sign in) returns to the same query and tab.
+  function authUrl(path) {
+    var query = (currentQuery || '').trim();
+    if (!query) return path;
+    return path + '?next=' + encodeURIComponent(
+      nextPathForQuery(query, currentMode, currentPage)
+    );
+  }
+
+  function syncAuthLinks() {
+    var loginHref = authUrl('/login');
+    var signupHref = authUrl('/signup');
+    var topLink = userArea ? userArea.querySelector('.sign-in-link') : null;
+    if (!currentUser && topLink) topLink.href = loginHref;
+    var bannerLink = loginBanner ? loginBanner.querySelector('.banner-link') : null;
+    if (bannerLink) bannerLink.href = loginHref;
+    if (signinContinue) signinContinue.href = loginHref;
+    if (signinSignup) signinSignup.href = signupHref;
   }
 
   // ---------- Repeat-search cache ----------
@@ -851,16 +918,46 @@
 
   function doSearch(q, lucky) {
     if (!q) return;
-    // URL-like → navigate
+    q = q.trim().slice(0, MAX_QUERY);
+    if (!q) return;
+    // URL-like input navigates only to http(s); javascript:/data: and other
+    // schemes are treated as ordinary search text.
     if (q.indexOf('.') !== -1 && q.indexOf(' ') === -1) {
-      window.location.href = /^https?:\/\//i.test(q) ? q : 'https://' + q;
-      return;
+      var target = safeNavigationUrl(q);
+      if (target) {
+        window.location.href = target;
+        return;
+      }
     }
     performSearch(q, 1, lucky, 'push');
   }
 
+  function renderLimitCard(query, data) {
+    showLoginBanner();
+    var next = nextPathForQuery(query, currentMode, currentPage);
+    var encodedNext = encodeURIComponent(next);
+    var loginUrl = (data && data.login_url) || ('/login?next=' + encodedNext);
+    var signupUrl = (data && data.signup_url) || ('/signup?next=' + encodedNext);
+    resultsContainer.innerHTML =
+      '<div class="no-results limit-card">' +
+        '<div class="no-results-icon">🔒</div>' +
+        '<h3>Sign in to continue</h3>' +
+        '<p>Your free searches are used up. Sign in or create a free account to keep searching for <strong>' +
+          esc(query) + '</strong>.</p>' +
+        '<div class="limit-actions">' +
+          '<a class="limit-primary" href="' + escAttr(loginUrl) + '">Sign in</a>' +
+          '<a class="limit-secondary" href="' + escAttr(signupUrl) + '">Create an account</a>' +
+        '</div>' +
+        '<p class="limit-note">Your search is saved and will reopen after you sign in.</p>' +
+      '</div>';
+    pagination.innerHTML = '';
+    syncAuthLinks();
+  }
+
   // ---------- Search ----------
   function performSearch(query, page, lucky, historyMode) {
+    query = (query || '').trim().slice(0, MAX_QUERY);
+    if (!query) return;
     if (currentMode === 'images' && !lucky) {
       performImageSearch(query, page, historyMode);
       return;
@@ -869,11 +966,16 @@
     currentQuery = query;
     currentPage  = page;
     var seq = ++searchSeq;
+    document.title = query + ' – 8search';
+    syncAuthLinks();
 
     // Switch to results layout
+    closeSuggestions();
     document.body.classList.add('searching');
     searchSection.classList.add('compact');
     if (globeSection) globeSection.classList.add('hidden');
+    if (trendingNews) trendingNews.classList.add('hidden');
+    if (trendingPeek) trendingPeek.classList.add('hidden');
     resultsSection.classList.remove('hidden');
 
     var cacheKey = searchCacheKey(currentMode, query, page);
@@ -881,6 +983,7 @@
       var cached = readSearchCache(cacheKey);
       if (cached) {
         currentPage = cached.page || page;
+        syncAuthLinks();
         if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
         renderResults(cached);
         pagination.setAttribute('aria-busy', 'false');
@@ -893,7 +996,8 @@
     pagination.innerHTML = '';
     pagination.setAttribute('aria-busy', 'true');
 
-    fetch('/api/search?q=' + encodeURIComponent(query) + '&page=' + page,
+    fetch('/api/search?q=' + encodeURIComponent(query) + '&page=' + page +
+          '&tab=' + encodeURIComponent(currentMode),
           { credentials: 'same-origin' })
       .then(function (r) {
         return r.json().then(function (data) {
@@ -908,25 +1012,28 @@
         // A newer search/page was requested while this one was in flight.
         if (seq !== searchSeq) return;
 
-        if (data.redirect) { window.location.href = data.redirect; return; }
+        if (data.redirect) {
+          var redirect = safeNavigationUrl(data.redirect);
+          if (redirect) window.location.href = redirect;
+          return;
+        }
 
         if (data.limit_reached) {
-          showLoginBanner();
-          resultsContainer.innerHTML =
-            '<div class="no-results">' +
-              '<div class="no-results-icon">🔒</div>' +
-              '<h3>Free searches used up</h3>' +
-              '<p><a href="login.html">Sign in</a> or <a href="signup.html">create an account</a> for unlimited results.</p>' +
-            '</div>';
+          currentPage = page;
+          if (historyMode) updateUrl(query, page, historyMode, currentMode);
+          renderLimitCard(query, data);
           return;
         }
 
         if (lucky && data.results && data.results.length) {
-          window.location.href = data.results[0].url; return;
+          var luckyUrl = safeNavigationUrl(data.results[0].url);
+          if (luckyUrl) window.location.href = luckyUrl;
+          return;
         }
 
         if (!lucky) writeSearchCache(cacheKey, data);
         currentPage = data.page || page;
+        syncAuthLinks();
         if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
         renderResults(data);
       })
@@ -946,13 +1053,20 @@
 
   // ---------- Image search ----------
   function performImageSearch(query, page, historyMode) {
+    query = (query || '').trim().slice(0, MAX_QUERY);
+    if (!query) return;
     currentQuery = query;
     currentPage  = page;
     var seq = ++searchSeq;
+    document.title = query + ' – 8search';
+    syncAuthLinks();
 
+    closeSuggestions();
     document.body.classList.add('searching');
     searchSection.classList.add('compact');
     if (globeSection) globeSection.classList.add('hidden');
+    if (trendingNews) trendingNews.classList.add('hidden');
+    if (trendingPeek) trendingPeek.classList.add('hidden');
     resultsSection.classList.remove('hidden');
 
     resultsContainer.innerHTML =
@@ -973,7 +1087,14 @@
       })
       .then(function (data) {
         if (seq !== searchSeq) return;
+        if (data.limit_reached) {
+          currentPage = page;
+          if (historyMode) updateUrl(query, page, historyMode, currentMode);
+          renderLimitCard(query, data);
+          return;
+        }
         currentPage = data.page || page;
+        syncAuthLinks();
         if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
         renderImageResults(data);
       })
@@ -1518,6 +1639,22 @@
                       .replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  // ---------- Search-engine hint ----------
+  (function initEngineBanner() {
+    if (!engineBanner) return;
+    var dismissed = false;
+    try { dismissed = window.localStorage.getItem(ENGINE_HINT_KEY) === '1'; } catch (e) {}
+    if (!dismissed && !document.body.classList.contains('searching')) {
+      engineBanner.classList.remove('hidden');
+    }
+    if (engineBannerClose) {
+      engineBannerClose.addEventListener('click', function () {
+        engineBanner.classList.add('hidden');
+        try { window.localStorage.setItem(ENGINE_HINT_KEY, '1'); } catch (e) {}
+      });
+    }
+  })();
+
   // ---------- Init ----------
   window.addEventListener('popstate', function () {
     var route = readRoute();
@@ -1536,6 +1673,8 @@
     setMode(initialRoute.mode, { rerun: false });
     searchInput.value = initialRoute.q;
     performSearch(initialRoute.q, initialRoute.page, false, null);
+  } else if (window.EightSearchNews && window.EightSearchNews.load) {
+    window.EightSearchNews.load();
   }
 
   window.EightSearch = {

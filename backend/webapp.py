@@ -19,6 +19,9 @@ router = APIRouter()
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 INDEX_FILE = os.path.join(FRONTEND_DIR, "index.html")
 SET_DEFAULT_FILE = os.path.join(FRONTEND_DIR, "set-default.html")
+ABOUT_FILE = os.path.join(FRONTEND_DIR, "about.html")
+PRIVACY_FILE = os.path.join(FRONTEND_DIR, "privacy.html")
+TERMS_FILE = os.path.join(FRONTEND_DIR, "terms.html")
 MAX_QUERY_LENGTH = 500
 VALID_TABS = {"web", "ai", "images", "code"}
 
@@ -242,3 +245,18 @@ async def set_default(request: Request):
     template = template.replace("__QUERY_TEMPLATE__", root + "/search?q=%s")
     template = template.replace("__SEARCH_URL__", root + "/search?q=%s")
     return HTMLResponse(template)
+
+
+@router.get("/about", include_in_schema=False)
+async def about_page():
+    return FileResponse(ABOUT_FILE, media_type="text/html")
+
+
+@router.get("/privacy", include_in_schema=False)
+async def privacy_page():
+    return FileResponse(PRIVACY_FILE, media_type="text/html")
+
+
+@router.get("/terms", include_in_schema=False)
+async def terms_page():
+    return FileResponse(TERMS_FILE, media_type="text/html")

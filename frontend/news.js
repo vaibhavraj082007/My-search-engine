@@ -119,6 +119,7 @@
           '<div class="tn-card-meta">' + esc(source) + (time ? ' · ' + esc(time) : '') + '</div>' +
           '<h3 class="tn-card-title">' + esc(item.title || '') + '</h3>' +
           (item.summary ? '<p class="tn-card-snippet">' + esc(item.summary) + '</p>' : '') +
+          '<span class="tn-card-more">See more →</span>' +
         '</div>';
 
       card.addEventListener('click', function () {
@@ -177,7 +178,4 @@
     open: openStory,
     close: closeStory
   };
-
-  // Initial load
-  loadNews('all');
 })();

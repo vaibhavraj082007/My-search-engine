@@ -17,6 +17,7 @@ RUN pip install -r requirements.txt
 
 COPY backend ./backend
 COPY frontend ./frontend
+COPY scripts ./scripts
 RUN mkdir -p /app/data
 
 ENV PORT=8000 \

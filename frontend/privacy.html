@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f2ec">
+  <title>Privacy – 8search</title>
+  <meta name="description" content="What 8search stores, what it sends to third parties, and the choices you have.">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="search" type="application/opensearchdescription+xml" title="8search" href="/opensearch.xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css?v=20261117-5">
+</head>
+<body class="landing-page legal-page">
+  <header class="top-bar">
+    <a href="/" class="top-bar-logo"><span class="logo-8">8</span>search</a>
+    <div class="top-bar-right">
+      <a href="/" class="sign-in-link">Back to search</a>
+    </div>
+  </header>
+
+  <main class="legal-main">
+    <p class="legal-eyebrow">Privacy</p>
+    <h1 class="legal-title">What 8search stores — and what it does not.</h1>
+    <p class="legal-lead">
+      This page is written to match what the 8search code actually does. It is deliberately
+      plain: what is collected, why, how long it stays, and where it goes.
+    </p>
+
+    <!-- TODO(owner): add a published contact email if you want one here. -->
+    <article class="legal-card">
+      <h2>Searching without an account</h2>
+      <p>
+        You do not need an account to search. Guest searches are limited to a small daily
+        allowance (four by default). To apply that limit, the server sets two first-party
+        cookies: <code>guest_id</code>, a random identifier, and <code>guest_searches</code>, a
+        counter. Both expire after 24 hours. The quota code itself does not save them to the
+        database.
+      </p>
+      <p>
+        Your query is sent to third-party search and content providers so they can return
+        results. Depending on the query, that can include DuckDuckGo, Bing, Wikipedia,
+        Wiktionary, YouTube, Yahoo and Brave. Those providers have their own privacy policies.
+        Results are also cached temporarily on the 8search server by query.
+      </p>
+    </article>
+
+    <article class="legal-card">
+      <h2>Accounts</h2>
+      <ul>
+        <li>An account stores your email address and a one-way hash of your password. The plain password is never stored.</li>
+        <li>A random session token is kept in an HttpOnly, SameSite=Lax cookie for up to 30 days so you stay signed in. Sessions and password-reset tokens are stored in the server database; reset tokens are hashed and expire.</li>
+        <li>If email delivery is configured, sign-in notices and password-reset emails are sent to your address. Those security notices can include the time, an approximate IP address, and a browser/device string.</li>
+      </ul>
+    </article>
+
+    <article class="legal-card">
+      <h2>Click statistics and suggestions</h2>
+      <p>
+        When you click a result, 8search records that the result was useful for the query. The
+        click record can contain the query text, the result title and URL, its position, a random
+        session identifier, a one-way hash of your account email if you are signed in, and salted
+        hashes of the IP address and browser user agent. Raw IP addresses and raw browser strings
+        are not stored in this database.
+      </p>
+      <p>
+        Click events are deleted after 90 days by default. Aggregated per-query click counts stay
+        so ranking can keep working, and clicks decay with a 30-day half-life. Typed queries are
+        also counted in aggregate for suggestions after passing a filter that rejects email
+        addresses and phone numbers.
+      </p>
+    </article>
+
+    <article class="legal-card">
+      <h2>Feedback</h2>
+      <p>
+        The feedback form stores the message you write, the optional name and email you enter,
+        your IP address, and your browser user agent. This is used to read and answer feedback and
+        to prevent abuse. It is also emailed to the site operator when email delivery is
+        configured. Feedback remains in the database until the operator removes it.
+      </p>
+    </article>
+
+    <article class="legal-card">
+      <h2>Photos, translation, weather and maps</h2>
+      <ul>
+        <li><strong>Lens / visual search:</strong> camera frames and uploaded photos are processed in your browser and are not uploaded. Only text you explicitly choose to solve, translate or search is sent to the server.</li>
+        <li><strong>Translation:</strong> text you ask to translate is forwarded to Google's public translate endpoint.</li>
+        <li><strong>Weather:</strong> if you click Weather and allow location access, your browser's coordinates are used to request a forecast from Open-Meteo.</li>
+        <li><strong>Maps:</strong> map tiles and earthquake data come from Esri, OpenStreetMap and the USGS.</li>
+      </ul>
+    </article>
+
+    <article class="legal-card">
+      <h2>What 8search does not do</h2>
+      <ul>
+        <li>It does not sell personal data.</li>
+        <li>It does not run advertising trackers, third-party analytics, or cross-site advertising profiles.</li>
+        <li>It does not store your raw IP address in the click-ranking database.</li>
+      </ul>
+      <p>
+        Like most web servers, the hosting environment and its logs may process IP addresses and
+        request metadata for security and operations.
+        <!-- TODO(owner): confirm your host's access-log retention and add it here. -->
+      </p>
+    </article>
+
+    <article class="legal-card">
+      <h2>Storage, security and your choices</h2>
+      <p>
+        Account, click, feedback, suggestion and news data live in SQLite databases on the server
+        that runs 8search. Production deployments use HTTPS, secure cookies, salted hashes and
+        regular backups. No system is perfectly secure, but the service is built to keep the
+        sensitive parts hashed and the raw personal data minimal.
+      </p>
+      <p>
+        Clearing your browser cookies removes the guest counter and your session. To ask about
+        data associated with an account, use the feedback form on the homepage.
+        <!-- TODO(owner): there is no self-service account-deletion endpoint in the code yet. Add one, or document the manual process here. -->
+      </p>
+    </article>
+
+    <p class="legal-note">Last updated: 17 November 2026. See also the <a href="/terms">Terms</a>.</p>
+  </main>
+
+  <footer class="site-footer">
+    <nav class="footer-links" aria-label="Site information">
+      <a class="footer-link" href="/about">About</a>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <a class="footer-link" href="/privacy">Privacy</a>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <a class="footer-link" href="/terms">Terms</a>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <a class="footer-link footer-default-link" href="/set-default">Set 8search as default</a>
+    </nav>
+    <p class="footer-note">© 2026 8search</p>
+  </footer>
+</body>
+</html>

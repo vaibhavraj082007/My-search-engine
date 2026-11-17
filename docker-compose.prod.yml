@@ -1,0 +1,77 @@
+# Production stack: Caddy terminates HTTPS, FastAPI runs on the private
+# Docker network, Redis provides shared caches and rate limits.
+#
+#   cp .env.production.example .env
+#   # edit .env, then:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Only Caddy publishes ports (80/443). The app port 8000 stays private.
+
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      PORT: "8000"
+      WEB_CONCURRENCY: "${WEB_CONCURRENCY:-4}"
+      REDIS_URL: "redis://redis:6379/0"
+      TRUST_PROXY: "1"
+      FORCE_HTTPS: "1"
+      COOKIE_SECURE: "1"
+      FORWARDED_ALLOW_IPS: "*"
+    expose:
+      - "8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: "${SITE_ADDRESS:-localhost}"
+      ACME_EMAIL: "${ACME_EMAIL:-admin@example.com}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:

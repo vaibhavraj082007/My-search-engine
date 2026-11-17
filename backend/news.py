@@ -42,7 +42,7 @@ DB_PATH = os.getenv(
     os.path.join(os.path.dirname(__file__), "..", "data", "news.db"),
 )
 NEWS_REFRESH_HOURS = max(1.0, float(os.getenv("NEWS_REFRESH_HOURS", "6")))
-NEWS_COUNT = max(25, int(os.getenv("NEWS_COUNT", "25")))
+NEWS_COUNT = min(50, max(25, int(os.getenv("NEWS_COUNT", "25"))))
 NEWS_MAX_AGE_HOURS = max(1, int(os.getenv("NEWS_MAX_AGE_HOURS", "48")))
 NEWS_RELAX_HOURS = max(NEWS_MAX_AGE_HOURS, 72)
 FEED_TIMEOUT = max(1.0, float(os.getenv("NEWS_FEED_TIMEOUT", "6")))
@@ -101,7 +101,7 @@ def _get_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=10000")
+    conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -396,9 +396,11 @@ def _store_snapshot(items: list[dict], now: datetime) -> int:
             ).fetchone()
             if row:
                 ids.append(row["id"])
-        if len(ids) < 10:
+        if len(ids) < NEWS_COUNT:
             conn.rollback()
-            raise ValueError("not enough usable items to replace the snapshot")
+            raise ValueError(
+                f"need at least {NEWS_COUNT} usable items to replace the snapshot"
+            )
         cursor = conn.execute(
             "INSERT INTO news_snapshots (created_at, item_ids_json) VALUES (?, ?)",
             (_iso(now), json.dumps(ids)),
@@ -500,8 +502,11 @@ async def refresh_news(force: bool = False) -> dict:
 
             previous = _previous_urls()
             selected = _rank_for_snapshot(items, now, previous)
-            if len(selected) < 10:
-                message = f"only {len(selected)} selected items; keeping the previous snapshot"
+            if len(selected) < NEWS_COUNT:
+                message = (
+                    f"only {len(selected)} selected items; need {NEWS_COUNT}; "
+                    "keeping the previous snapshot"
+                )
                 logger.error("news refresh failed: %s", message)
                 return {"status": "failed", "items": len(selected), "message": message, **stats}
 

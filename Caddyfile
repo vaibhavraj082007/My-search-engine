@@ -1,0 +1,16 @@
+# HTTPS reverse proxy for the production Compose stack.
+#
+# Set SITE_ADDRESS and ACME_EMAIL in .env, then:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Caddy obtains and renews the TLS certificate automatically and forwards
+# X-Forwarded-Proto / X-Forwarded-Host / X-Forwarded-For to the app.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy web:8000
+}

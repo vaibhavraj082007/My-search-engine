@@ -2,7 +2,7 @@
 
 import uuid
 
-from backend import clicks
+from backend import clicks, search_api
 from conftest import build_payload, click_result, search
 
 
@@ -144,6 +144,42 @@ def test_click_does_not_consume_guest_search_quota(client):
     for _ in range(3):
         assert not search(client, query).json().get("limit_reached")
     assert search(client, query).json().get("limit_reached") is True
+
+
+def test_guest_search_limit_is_configurable(client, monkeypatch):
+    monkeypatch.setenv("GUEST_SEARCH_LIMIT", "1")
+    client.cookies.set("guest_searches", "1")
+
+    response = search(client, _fresh_query("envlimit"))
+    data = response.json()
+    assert data["limit_reached"] is True
+    assert data["login_url"].startswith("/login?next=")
+    assert "guest_searches" not in response.cookies
+
+
+def test_image_search_shares_the_guest_quota(client, monkeypatch):
+    async def fake_images(query: str, page: int) -> dict:
+        return {
+            "images": [{"url": "https://example.com/image.jpg", "title": query}],
+            "query": query,
+            "page": page,
+            "per_page": 30,
+            "has_more": False,
+        }
+
+    monkeypatch.setattr(search_api, "_collect_images", fake_images)
+
+    client.cookies.set("guest_searches", "4")
+    blocked = client.get("/api/images", params={"q": "cats"}).json()
+    assert blocked["limit_reached"] is True
+    assert blocked["login_url"].startswith("/login?next=")
+    assert "%2Fsearch%3Fq%3Dcats" in blocked["login_url"]
+
+    client.cookies.set("guest_searches", "3")
+    allowed = client.get("/api/images", params={"q": "dogs"})
+    assert allowed.status_code == 200
+    assert not allowed.json().get("limit_reached")
+    assert allowed.cookies["guest_searches"] == "4"
 
 
 def test_popular_endpoint_returns_clicked_url(client):

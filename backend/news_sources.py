@@ -50,7 +50,7 @@ FEEDS: tuple[FeedSource, ...] = (
     FeedSource("NDTV", "https://feeds.feedburner.com/ndtvnews-top-stories", "india", 0.86),
     FeedSource("NDTV", "https://feeds.feedburner.com/ndtvnews-world-news", "world", 0.84),
     FeedSource("NDTV", "https://feeds.feedburner.com/ndtvprofit-latest", "business", 0.82),
-    FeedSource("NDTV", "https://feeds.feedburner.com/ndtv-sports", "sports", 0.82),
+    FeedSource("NDTV", "https://feeds.feedburner.com/ndtvsports-latest", "sports", 0.82),
     FeedSource("The Indian Express", "https://indianexpress.com/section/india/feed/", "india", 0.94),
     FeedSource("The Indian Express", "https://indianexpress.com/section/world/feed/", "world", 0.92),
     FeedSource("The Indian Express", "https://indianexpress.com/section/business/feed/", "business", 0.90),

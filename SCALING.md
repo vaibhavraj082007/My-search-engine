@@ -141,6 +141,26 @@ Autoscale on CPU and request latency, not raw request count.
 | `DDGS_VIDEO_CONCURRENCY` | `3` | Blocking video fallbacks allowed at once |
 | `DDGS_VIDEO_TIMEOUT` | `4` | Hard timeout for a video fallback |
 | `RATE_LIMIT_PER_MINUTE` | `120` | Per-IP API requests per minute (`0` disables) |
+| `SUGGEST_RATE_LIMIT_PER_MINUTE` | `600` | Per-IP autocomplete budget, separate from search |
+| `GUEST_SEARCH_LIMIT` | `4` | Free searches before a guest is prompted to sign in |
+| `NEWS_REFRESH_HOURS` | `6` | Hours between news snapshot refreshes |
+| `NEWS_COUNT` | `25` | Minimum/target number of ranked stories in a snapshot |
+| `NEWS_MAX_AGE_HOURS` | `48` | Preferred story age; ranking relaxes to 72h when thin |
+| `NEWS_FEED_TIMEOUT` | `6` | Per-publisher feed timeout |
+| `NEWS_DB_PATH` | `data/news.db` | News snapshot and item store |
+| `NEWS_ADMIN_TOKEN` | unset | Required Bearer/X-News-Token for `POST /api/news/refresh` |
+| `NEWS_CONTACT_EMAIL` | `FEEDBACK_EMAIL` | Contact address in the news feed User-Agent |
+| `GNEWS_API_KEY` | unset | Optional licensed GNews enrichment |
+| `APP_BASE_URL` | request host | Public origin used in links, OpenSearch and the manifest |
+| `FORCE_HTTPS` | `0` | Adds HSTS when TLS terminates at a proxy |
+| `COOKIE_SECURE` | auto | Force the `Secure` cookie flag (`1` in production) |
+
+News refreshes use a SQLite-backed cross-process file lock and an
+`asyncio.Lock` per worker, so a four-worker Compose deployment performs one
+refresh and the other workers keep serving the previous snapshot. Each worker
+still checks the snapshot age every five minutes. In a multi-host deployment,
+point `NEWS_DB_PATH` at shared storage or run the scheduler as a single
+dedicated job; the HTTP API only reads snapshots.
 | `CLICKS_DB_PATH` | `data/clicks.db` | Click SQLite database |
 | `CLICK_TOKEN_SECRET` | generated `data/.click_secret` | Shared HMAC key for click tokens (required across replicas) |
 | `CLICK_HALF_LIFE_DAYS` | `30` | Click decay half-life |

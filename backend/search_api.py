@@ -1048,8 +1048,12 @@ async def search(
 @router.get("/api/images")
 async def image_search(
     response: Response,
+    request: Request,
     q: str = Query("", min_length=0, max_length=400),
     page: int = Query(1, ge=1, le=5),
+    session_token: str | None = Cookie(default=None),
+    guest_id: str | None = Cookie(default=None),
+    guest_searches: str | None = Cookie(default=None),
 ):
     """Image results for the Images tab. Cached and bounded like web search."""
     query = q.strip()
@@ -1058,6 +1062,28 @@ async def image_search(
             "images": [], "query": "", "page": 1,
             "per_page": IMAGE_RESULTS_PER_PAGE, "has_more": False,
         }
+
+    # Images are searches too: page 1 consumes one guest search. Paging and
+    # any logged-in user stay unlimited. Suggestions/news/globe never reach
+    # this route, so they never spend quota.
+    user = await run_in_threadpool(get_current_user, session_token)
+    if user is None:
+        secure_cookie = cookie_secure(request)
+        if not guest_id:
+            guest_id = uuid.uuid4().hex
+            response.set_cookie(key="guest_id", value=guest_id,
+                                httponly=True, samesite="lax", secure=secure_cookie,
+                                max_age=86400, path="/")
+        if page == 1:
+            try:
+                count = int(guest_searches or "0")
+            except (TypeError, ValueError):
+                count = 0
+            if count >= _guest_limit():
+                return _limit_payload(query, "images")
+            response.set_cookie(key="guest_searches", value=str(count + 1),
+                                httponly=False, samesite="lax", secure=secure_cookie,
+                                max_age=86400, path="/")
 
     try:
         payload, cache_hit = await cache.get_or_set(

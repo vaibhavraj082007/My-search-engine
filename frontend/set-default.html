@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=20261116-2">
+  <link rel="stylesheet" href="/style.css?v=20261117-5">
   <style>
     .default-guide {
       max-width: 720px;
@@ -107,16 +107,27 @@
       <div class="browser-card">
         <h3>Mozilla Firefox</h3>
         <ol>
-          <li>Visit <a href="__BASE_URL__" style="color:var(--link);">8search homepage</a>.</li>
-          <li>Right-click the address bar and select <strong>Add "8search"</strong>.</li>
-          <li>Open <strong>Settings</strong> &rarr; <strong>Search</strong> and select <strong>8search</strong> as your Default Search Engine.</li>
+          <li>Visit the <a href="__BASE_URL__" style="color:var(--link);">8search homepage</a>. Firefox discovers the <a href="/opensearch.xml" style="color:var(--link);">OpenSearch descriptor</a> automatically.</li>
+          <li>Open <strong>Settings</strong> &rarr; <strong>Search</strong>. Under <em>Search Shortcuts</em>, select <strong>8search</strong> and click <strong>Add</strong>.</li>
+          <li>Choose <strong>8search</strong> in the <em>Default Search Engine</em> menu.</li>
+          <li>Optional: in the address bar, type <span class="code-pill">@8search</span> followed by a query to search with 8search without changing the default.</li>
         </ol>
       </div>
 
       <div class="browser-card">
         <h3>Safari (macOS / iOS)</h3>
         <ol>
-          <li>You can bookmark 8search or set <span class="code-pill">__BASE_URL__</span> as your Homepage in <strong>Safari Settings</strong> &rarr; <strong>General</strong>.</li>
+          <li>Safari does not allow adding arbitrary third-party search engines to its own address bar. Use Chrome, Brave, Edge, or Firefox for address-bar searches.</li>
+          <li>On macOS, set <span class="code-pill">__BASE_URL__</span> as your Homepage in <strong>Safari Settings</strong> &rarr; <strong>General</strong>.</li>
+          <li>On iPhone or iPad, open 8search in Safari, tap <strong>Share</strong> &rarr; <strong>Add to Home Screen</strong>, then launch it from the new icon.</li>
+        </ol>
+      </div>
+
+      <div class="browser-card">
+        <h3>Use the OpenSearch descriptor directly</h3>
+        <ol>
+          <li>Any OpenSearch-compatible browser can add <span class="code-pill">__BASE_URL__/opensearch.xml</span>.</li>
+          <li>If a browser asks for a URL template, use <span class="code-pill">__QUERY_TEMPLATE__</span>.</li>
         </ol>
       </div>
     </div>

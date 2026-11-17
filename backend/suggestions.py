@@ -27,7 +27,9 @@ router = APIRouter()
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "suggest.db")
 MAX_SUGGESTIONS = 8
 CACHE_TTL = 180
-WIKI_TIMEOUT = 0.30
+WIKI_TIMEOUT = max(
+    0.15, float(os.getenv("SUGGEST_WIKI_TIMEOUT", "0.75"))
+)
 
 _WHITESPACE = re.compile(r"\s+")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -44,8 +46,8 @@ def _get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=FULL")
+    conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 
@@ -83,6 +85,16 @@ def clean_query(value: str | None) -> str:
 
 def _norm(value: str) -> str:
     return _WHITESPACE.sub(" ", value).strip().casefold()
+
+
+def _user_agent() -> str:
+    contact = (
+        os.getenv("SUGGEST_CONTACT_EMAIL", "").strip()
+        or os.getenv("NEWS_CONTACT_EMAIL", "").strip()
+        or os.getenv("FEEDBACK_EMAIL", "").strip()
+        or "suggest@8search.local"
+    )
+    return f"8search-suggestions/1.0 (+mailto:{contact})"
 
 
 def record_query(value: str) -> None:
@@ -215,7 +227,7 @@ async def wikipedia_suggestions(value: str, limit: int) -> list[dict]:
                     "format": "json",
                     "origin": "*",
                 },
-                headers={"Accept": "application/json"},
+                headers={"Accept": "application/json", "User-Agent": _user_agent()},
             ),
             timeout=WIKI_TIMEOUT,
         )
@@ -257,7 +269,9 @@ async def suggest(value: str, limit: int = MAX_SUGGESTIONS) -> list[dict]:
     text = clean_query(value)
     if not text:
         return []
-    key = _norm(text)
+    # Include the requested size so a small limit never gets a longer cached
+    # list (and vice versa) on a hit.
+    key = f"{limit}:{_norm(text)}"
     cached = _cache.get(key)
     now = time.monotonic()
     if cached and now - cached[0] < CACHE_TTL:

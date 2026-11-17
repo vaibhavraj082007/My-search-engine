@@ -9,4 +9,5 @@ backend/data/
 *.db-journal
 .click_secret
 data/.click_secret
+data/*.lock
 .env

@@ -26,8 +26,8 @@
 
 - Type any query and get results instantly — just like Google.
 - Type a URL (like `example.com`) and navigate directly — just like Chrome's address bar.
-- **Every user gets 4 free searches without signing in.**
-- After 4 searches → a friendly prompt asks the user to **log in or create a free account**.
+- **Every guest gets 4 free searches** (configurable with `GUEST_SEARCH_LIMIT`).
+- After the limit → a friendly prompt asks the user to **log in or create a free account**, then returns them to the same search.
 - Once logged in → **unlimited searches, forever, no limits.**
 - **Click-popularity ranking:** links people open most for a query rise to the top, with position-bias correction and time decay.
 - Powered by your own crawler and full-text search index — you control what's indexed.
@@ -47,6 +47,8 @@ Right below the search bar sits a **3D satellite globe** that users can spin and
 | Feature | Guest (no login) | Logged-in User |
 | --- | :---: | :---: |
 | Web search | ✅ 4 searches | ✅ **Unlimited** |
+| Trending news homepage | ✅ | ✅ |
+| Search suggestions | ✅ | ✅ |
 | Click-popularity ranking (learns from result clicks) | ✅ | ✅ |
 | URL navigation (like Chrome) | ✅ | ✅ |
 | Interactive satellite globe | ✅ | ✅ |
@@ -85,29 +87,38 @@ Right below the search bar sits a **3D satellite globe** that users can spin and
 ```
 8search/
 ├── frontend/                    # The browser app
-│   ├── index.html               # Main page: search bar + globe
+│   ├── index.html               # Search page, news feed, globe
 │   ├── style.css                # Colours, layout, dark theme
-│   ├── app.js                   # Search logic, login state, UTC clock
+│   ├── app.js                   # Search, canonical URLs, suggestions, auth
 │   ├── map.js                   # Globe, map layers, current weather panel
 │   ├── lens.js                  # In-app camera, QR scanning, OCR, Lens panel
+│   ├── news.js                  # Trending News cards and in-app story modal
+│   ├── set-default.html         # Per-browser default search instructions
 │   ├── vendor/jsQR.js           # Local QR fallback decoder
-│   ├── login.html               # Login page
-│   └── signup.html              # Sign-up page
+│   ├── login.html               # Login page (preserves ?next=)
+│   └── signup.html              # Sign-up page (preserves ?next=)
 │
 ├── backend/                     # Python FastAPI server
 │   ├── main.py                  # App entry point, routes, CORS, static files
+│   ├── webapp.py                # /search, OpenSearch, manifest, set-default
+│   ├── suggestions.py           # /api/suggest (OpenSearch + rich JSON)
+│   ├── news.py                  # Feed refresh, snapshots, /api/news
+│   ├── news_ranking.py          # Cleaning, dedupe, clustering, ranking
+│   ├── news_sources.py          # Verified publisher RSS/Atom list
 │   ├── auth.py                  # User accounts (salted password hashing)
 │   ├── search_api.py            # Search endpoint (full-text search)
-│   ├── ranking.py               # Click normalisation, decay, position bias, ordering
-│   ├── clicks.py                # Click storage, HMAC tokens, anti-abuse, /api/click
+│   ├── ranking.py               # Click normalisation, decay, position bias
+│   ├── clicks.py                # Click storage, HMAC tokens, anti-abuse
 │   ├── searchdb.py              # Search index database
 │   ├── crawler.py               # Web crawler (respects robots.txt)
 │   ├── lens.py                  # /api/solve (SymPy) and /api/translate
 │   └── data/                    # (legacy location; runtime data lives in ../data)
 │
-├── data/                        # Auto-created: users, search, feedback, clicks SQLite DBs
-├── tests/                       # pytest suite for ranking and click anti-abuse
+├── data/                        # Auto-created: users, clicks, news, suggestions
+├── tests/                       # pytest suite for search, news, suggestions
+├── scripts/check_news.py        # Validate real publisher feeds
 ├── scripts/seed_clicks.py       # Demo click data for the ranking
+├── DEPLOY.md                    # HTTPS Docker/Caddy/Nginx deployment guide
 ├── requirements.txt             # Python dependencies
 ├── requirements-dev.txt         # Test dependencies (pytest)
 └── README.md                    # ← You are here
@@ -152,6 +163,74 @@ That's it. Search, spin the globe, and explore the Earth.
 
 ---
 
+## 🌐 Make 8search your browser's search engine
+
+8search exposes a real browser search target and an OpenSearch descriptor:
+
+- `/search?q=<query>&tab=<web|ai|images|code>` — canonical, shareable, bookmarkable result page.
+- `/?q=<query>` — redirects to the canonical `/search` URL.
+- `/opensearch.xml` — OpenSearch discovery for Chrome, Brave, Edge, Firefox and compatible browsers.
+- `/set-default` — copy-ready instructions for every major browser.
+- Search URLs are kept current with `pushState`; Back/Forward restore the query, page and tab.
+
+Open **http://localhost:8000/set-default** for step-by-step instructions. For a
+production HTTPS domain, see [DEPLOY.md](DEPLOY.md).
+
+The URL template used by Chromium-based browsers is:
+
+```
+http://localhost:8000/search?q=%s
+```
+
+Result pages contain an escaped query in the `<title>`/description, a
+`noindex` robots tag, and UTF-8 support for emoji and non-Latin scripts. Query
+text is capped at 500 characters. URL-like input navigates only to `http` or
+`https`; `javascript:`, `data:` and other schemes are searched as text.
+
+### Search suggestions
+
+The homepage search box has a keyboard-accessible suggestions dropdown
+(↑/↓, Enter, Escape). Suggestions come from aggregated popular queries, the
+optional local crawl index, and Wikipedia's OpenSearch API. The same endpoint
+serves browsers via `/api/suggest?q=...`; use `format=rich` for
+`{q, suggestions:[{text, kind}]}`. Suggestions have a separate per-IP rate limit
+and never consume the guest search quota.
+
+---
+
+## 📰 Trending News
+
+The homepage ends with a Brave-style **Trending news** feed built only from
+official publisher RSS/Atom feeds in `backend/news_sources.py`:
+
+- The scheduler fetches all configured feeds on startup, then replaces the
+  snapshot every **6 hours** (configurable with `NEWS_REFRESH_HOURS`).
+- At least **25** current stories are selected. Sources are clustered with
+  `difflib`, ranked by recency, distinct-outlet coverage, source weight and
+  freshness, with a hard three-stories-per-publisher cap.
+- Only feed-provided fields are stored: headline, summary, image URL, publisher,
+  category, publication time and canonical article URL. No article bodies or
+  invented stories/images.
+- Snapshots are stored in SQLite (`data/news.db`) with stale-while-revalidate:
+  visitors keep seeing the previous snapshot while a refresh runs.
+- `GET /api/news` supports `category=all|india|world|technology|business|science|sports`,
+  `limit` up to 50, `ETag`/`304`, and public cache headers.
+- Cards clamp summaries to three lines and open an in-app **See more** modal;
+  the publisher link opens in a new tab.
+- `POST /api/news/refresh` is protected by `NEWS_ADMIN_TOKEN` and is intended
+  for operators. The scheduled refresh needs no manual call.
+
+Validate the real feeds without writing a snapshot:
+
+```bash
+python scripts/check_news.py
+```
+
+Optional licensed enrichment: set `GNEWS_API_KEY` to merge GNews results. The
+RSS-only feed works fully without a key.
+
+---
+
 ## 🔍 How Search Works
 
 8search is an **answer-first search page**. For each query it builds:
@@ -191,13 +270,18 @@ After crawling, matching pages are merged into web results.
 | `example.com` | Navigates directly (like Chrome) |
 | `dark web` | Answer + Wikipedia + videos + web links |
 | `serendipity` | Dictionary meaning + Wikipedia + videos + links |
-| Any query after 4 searches (guest) | Prompts to log in |
+| `query`, then every tab | Web, AI Answer, Images and Code each update the URL |
+| Any query after the guest limit | Prompts to sign in and returns to the same query |
 | Any query after login | Unlimited results |
 
 ### Rate Limiting (Guest vs Logged-in)
 
-- **Guests:** 4 searches per session. After that, a non-intrusive banner asks them to sign in.
+- **Guests:** 4 searches per session by default (`GUEST_SEARCH_LIMIT`). After
+  that, a non-intrusive card asks them to sign in. The query, page and tab are
+  preserved in a validated internal `next` path through login/signup.
 - **Logged-in users:** Unlimited searches. No caps. No throttle. No ads. Ever.
+- **Suggestions, OpenSearch, news and the globe** never consume guest quota.
+  Suggestions use `SUGGEST_RATE_LIMIT_PER_MINUTE`, separate from search.
 - **High-traffic protection:** per-IP API limiting, shared caching, and bounded
   upstream concurrency keep the site responsive under load. See
   [SCALING.md](SCALING.md) for the production path to 500k users.
@@ -416,6 +500,10 @@ Key endpoints:
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/search?q=...` | GET | Answer-first web search (cached, rate-limited, click-ranked) |
+| `/api/suggest?q=...` | GET | OpenSearch suggestions; `format=rich` for UI metadata |
+| `/api/news?category=...&limit=...` | GET | Real-publisher trending news snapshot (ETag/304) |
+| `/api/news/refresh` | POST | Protected manual refresh (`NEWS_ADMIN_TOKEN`) |
+| `/api/news/{id}` | GET | One stored news story |
 | `/api/click` | POST | Record a clicked result (HMAC token, background write, `204`) |
 | `/api/popular?q=...` | GET | Top clicked URLs for a query |
 | `/api/ranking/debug?q=...&token=...` | GET | Protected ranking diagnostics |
@@ -428,6 +516,10 @@ Key endpoints:
 | `/api/forgot-password` | POST | Email a password-reset link |
 | `/api/reset-password` | POST | Set a new password with a reset token |
 | `/api/feedback` | POST | Store feedback and email it to `FEEDBACK_EMAIL` |
+| `/search?q=...&tab=...` | GET | Canonical result page with escaped metadata and `noindex` |
+| `/opensearch.xml` | GET | OpenSearch discovery descriptor |
+| `/manifest.webmanifest` | GET | PWA manifest with the 8search search URL |
+| `/set-default` | GET | Per-browser default-search instructions |
 | `/health` | GET | Liveness probe for load balancers |
 | `/ready` | GET | Readiness probe (reports cache backend) |
 
@@ -457,6 +549,8 @@ Key endpoints:
 - **YouTube:** scraping results pages will be blocked at scale. Use the YouTube Data API.
 - **Map tiles:** OpenStreetMap and Esri tiles have usage limits. Switch to a commercial tile provider for heavy traffic.
 - **Authentication:** Add HTTPS, rate-limit failed logins, and consider OAuth for production.
+- **HTTPS and browser search:** follow [DEPLOY.md](DEPLOY.md); set `APP_BASE_URL`, `TRUST_PROXY`, `FORCE_HTTPS` and `COOKIE_SECURE`, then verify `/opensearch.xml` and `/set-default`.
+- **News:** feeds are public publisher RSS/Atom; keep the configured feed list curated and set `NEWS_CONTACT_EMAIL` to a real contact address.
 - **Crawler:** Maintain the 1-second delay and always respect `robots.txt`.
 
 See **[SCALING.md](SCALING.md)** for the full production architecture, sizing
@@ -473,7 +567,9 @@ math, environment variables, and load-test instructions.
 - [x] In-app Lens camera: QR, OCR, homework solving, translation
 - [x] User accounts with secure password hashing
 - [x] Click-popularity ranking (Google-style learning from result clicks)
-- [ ] Search suggestions / autocomplete
+- [x] Search suggestions / autocomplete
+- [x] Canonical `/search` URLs, OpenSearch and browser default instructions
+- [x] Real-publisher Trending News feed with in-app story previews
 - [ ] Search history for logged-in users
 - [ ] Bookmarked locations on the globe
 - [ ] Dark / light theme toggle
