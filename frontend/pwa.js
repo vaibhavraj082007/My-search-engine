@@ -16,12 +16,9 @@
   var directInstallBtn = document.getElementById("directInstallBtn");
   var directInstallLabel = document.getElementById("directInstallLabel");
   var directInstallNote = document.getElementById("directInstallNote");
-  var macWeblocBtn = document.getElementById("macWeblocBtn");
-  var winUrlBtn = document.getElementById("winUrlBtn");
   var macDmgBtn = document.getElementById("macDmgBtn");
   var winExeBtn = document.getElementById("winExeBtn");
   var androidApkBtn = document.getElementById("androidApkBtn");
-  var androidPwaBtn = document.getElementById("androidPwaBtn");
   var iosProfileBtn = document.getElementById("iosProfileBtn");
   var deferredPrompt = null;
 
@@ -178,63 +175,7 @@
     }
   }
 
-  // Client-side lightweight shortcut generators
-  function downloadWebloc() {
-    var origin = window.location.origin;
-    var content =
-      '<?xml version="1.0" encoding="UTF-8"?>\n' +
-      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
-      '<plist version="1.0">\n' +
-      '<dict>\n' +
-      '\t<key>URL</key>\n' +
-      '\t<string>' + origin + '/</string>\n' +
-      '</dict>\n' +
-      '</plist>\n';
-    var blob = new Blob([content], { type: "application/x-apple-binary" });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "8search.webloc";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () {
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }, 1000);
-  }
-
-  function downloadUrlShortcut() {
-    var origin = window.location.origin;
-    var content =
-      "[InternetShortcut]\r\n" +
-      "URL=" + origin + "/\r\n" +
-      "IconIndex=0\r\n";
-    var blob = new Blob([content], { type: "text/plain" });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "8search.url";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function () {
-      URL.revokeObjectURL(a.href);
-      a.remove();
-    }, 1000);
-  }
-
   // Wiring buttons
-  if (macWeblocBtn) {
-    macWeblocBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      downloadWebloc();
-    });
-  }
-
-  if (winUrlBtn) {
-    winUrlBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      downloadUrlShortcut();
-    });
-  }
-
   if (macDmgBtn) {
     macDmgBtn.addEventListener("click", function (e) {
       e.preventDefault();
@@ -253,18 +194,6 @@
     androidApkBtn.addEventListener("click", function (e) {
       e.preventDefault();
       downloadDirect("android");
-    });
-  }
-
-  if (androidPwaBtn) {
-    androidPwaBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt = null;
-      } else {
-        downloadDirect("android");
-      }
     });
   }
 

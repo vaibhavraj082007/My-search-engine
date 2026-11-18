@@ -4,7 +4,7 @@
  * page. It deliberately never caches API responses, account pages or search
  * results: those must always come from the server.
  */
-const CACHE = "8search-shell-v20261118-10";
+const CACHE = "8search-shell-v20261118-11";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [
   OFFLINE_URL,
