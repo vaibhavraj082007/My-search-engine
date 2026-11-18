@@ -330,6 +330,7 @@ def logout(
 
 
 @router.get("/api/me")
+@router.get("/api/auth/me")
 def me(user: str | None = Depends(get_current_user)):
     """Return the signed-in email, or null for guests.
 

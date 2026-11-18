@@ -159,6 +159,16 @@ async def signup_page():
     return FileResponse(os.path.join(FRONTEND_DIR, "signup.html"), media_type="text/html")
 
 
+@router.get("/forgot-password", include_in_schema=False)
+async def forgot_password_page():
+    return FileResponse(os.path.join(FRONTEND_DIR, "forgot-password.html"), media_type="text/html")
+
+
+@router.get("/reset-password", include_in_schema=False)
+async def reset_password_page():
+    return FileResponse(os.path.join(FRONTEND_DIR, "reset-password.html"), media_type="text/html")
+
+
 @router.get("/opensearch.xml", include_in_schema=False)
 async def opensearch(request: Request):
     root = base_url(request)
