@@ -104,10 +104,57 @@ def test_manifest_contains_search_url_and_icons(client):
     response = client.get("/manifest.webmanifest")
     assert response.status_code == 200
     data = json.loads(response.text)
+    assert data["id"] == "/"
     assert data["start_url"] == "/"
+    assert data["scope"] == "/"
+    assert data["display"] == "standalone"
     assert data["search_url"] == "https://search.example/search?q={searchTerms}"
     sizes = {icon["sizes"] for icon in data["icons"]}
-    assert {"32x32", "64x64", "180x180"} <= sizes
+    assert {"32x32", "64x64", "180x180", "192x192", "512x512"} <= sizes
+    maskable = [icon for icon in data["icons"] if "maskable" in icon.get("purpose", "")]
+    assert maskable
+
+
+def test_install_page_explains_every_platform(client):
+    response = client.get("/install")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    body = response.text
+    for text in ("iPhone", "iPad", "Android", "Windows", "macOS", "Add to Home Screen"):
+        assert text in body
+    assert 'id="installAppBtn"' in body
+    assert "/manifest.webmanifest" in body
+    assert "/pwa.js" in body
+
+
+def test_app_shell_files_are_present_and_keep_accounts_out_of_cache():
+    service_worker = (ROOT / "frontend/sw.js").read_text(encoding="utf-8")
+    offline = (ROOT / "frontend/offline.html").read_text(encoding="utf-8")
+    install = (ROOT / "frontend/install.html").read_text(encoding="utf-8")
+    assert 'url.pathname.startsWith("/api/")' in service_worker
+    assert 'request.mode === "navigate"' in service_worker
+    assert "offline.html" in service_worker
+    assert "You’re offline." in offline
+    assert "/install" in install
+
+
+def test_history_ui_is_available_from_the_search_bar_and_backed_by_the_api():
+    index = (ROOT / "frontend/index.html").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend/app.js").read_text(encoding="utf-8")
+
+    assert 'id="historyDialog"' in index
+    assert 'id="historyList"' in index
+    assert 'id="historyEmpty"' in index
+    assert 'id="historyClear"' in index
+    assert 'id="historyClearConfirm"' in index
+    assert 'aria-labelledby="historyTitle"' in index
+
+    assert 'id="historyBtn"' in app_js
+    assert "/api/history?limit=5" in app_js
+    assert "View all history" in app_js
+    assert "function openHistory()" in app_js
+    assert "function clearAllHistory()" in app_js
+    assert "method: 'DELETE'" in app_js
 
 
 def test_set_default_page_replaces_placeholders(client):
@@ -195,7 +242,7 @@ def test_information_pages_are_served_with_the_shared_footer(client):
         body = response.text
         assert title in body
         assert 'class="footer-links"' in body
-        for href in ("/about", "/privacy", "/terms", "/set-default"):
+        for href in ("/about", "/privacy", "/terms", "/set-default", "/install"):
             assert f'href="{href}"' in body
 
 
@@ -206,7 +253,7 @@ def test_landing_page_has_tagline_footer_and_no_third_party_brand():
     assert 'id="askAiFab"' in body
     assert "Ask 8search AI" in body
     assert "gemini" not in body.lower()
-    for href in ("/about", "/privacy", "/terms", "/set-default"):
+    for href in ("/about", "/privacy", "/terms", "/set-default", "/install"):
         assert f'href="{href}"' in body
     assert "© 2026 8search" in body
 

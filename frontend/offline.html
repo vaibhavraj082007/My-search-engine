@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f2ec">
+  <meta name="robots" content="noindex">
+  <title>Offline – 8search</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #f5f2ec;
+      color: #1d1c19;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(460px, 100%);
+      padding: 34px 28px;
+      background: #fffdfa;
+      border: 1px solid #e3dccf;
+      border-radius: 20px;
+      box-shadow: 0 16px 44px rgba(71, 50, 29, 0.08);
+      text-align: center;
+    }
+    .logo {
+      margin: 0 0 18px;
+      font-size: 2rem;
+      font-weight: 600;
+      letter-spacing: -0.04em;
+    }
+    .logo span { color: #1b7a55; }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 0;
+      color: #5f5a51;
+      font-size: 0.95rem;
+      line-height: 1.65;
+    }
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      margin-top: 22px;
+      padding: 0 20px;
+      background: #1d1c19;
+      color: #fff;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    a:focus-visible { outline: 2px solid #1b7a55; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="logo"><span>8</span>search</p>
+    <h1>You’re offline.</h1>
+    <p>8search needs a connection to search the web and load the latest news. Check your connection, then try again.</p>
+    <a href="/">Try again</a>
+  </main>
+</body>
+</html>

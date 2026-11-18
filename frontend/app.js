@@ -16,7 +16,8 @@
   var loginBanner     = document.getElementById('loginBanner');
   var bannerDismiss   = document.getElementById('bannerDismiss');
   var luckyBtn        = document.getElementById('luckyBtn');
-  var utcClock        = document.getElementById('utcClock');
+  var istClock        = document.getElementById('istClock') || document.getElementById('utcClock');
+  var topDate         = document.getElementById('topDate');
   var globeSection    = document.querySelector('.globe-section');
   var signinPrompt    = document.getElementById('signinPrompt');
   var signinBackdrop  = document.getElementById('signinBackdrop');
@@ -43,6 +44,18 @@
   var trendingNews    = document.getElementById('trendingNews');
   var trendingPeek    = document.getElementById('trendingPeek');
   var askAiFab        = document.getElementById('askAiFab');
+  var historyDialog   = document.getElementById('historyDialog');
+  var historyList     = document.getElementById('historyList');
+  var historyEmpty    = document.getElementById('historyEmpty');
+  var historyClose    = document.getElementById('historyClose');
+  var historyFooter   = document.getElementById('historyFooter');
+  var historyLoadMore = document.getElementById('historyLoadMore');
+  var historyClear    = document.getElementById('historyClear');
+  var historyConfirm  = document.getElementById('historyConfirm');
+  var historyClearConfirm = document.getElementById('historyClearConfirm');
+  var historyClearCancel  = document.getElementById('historyClearCancel');
+  var historySummary  = document.getElementById('historySummary');
+  var historyStatus   = document.getElementById('historyStatus');
 
   var currentUser  = null;
   var currentQuery = '';
@@ -55,6 +68,20 @@
   var MODES        = ['web', 'ai', 'images', 'code'];
   var MAX_QUERY    = 500;
   var ENGINE_HINT_KEY = '8search.engineHintDismissed';
+  var HISTORY_PAGE_SIZE = 50;
+  var HISTORY_EMPTY_TEXT = 'No searches yet. Your searches will appear here after you search while signed in.';
+  var HISTORY_DEFAULT_SUMMARY = 'Only you can see this. Searches are saved when you are signed in.';
+  var TAB_LABELS = { web: 'Web', ai: 'AI Answer', images: 'Images', code: 'Code' };
+  var pendingHistoryRecord = null;
+  var recentHistoryCache = { items: [], at: 0 };
+  var historyState = {
+    items: [],
+    total: 0,
+    hasMore: false,
+    loading: false,
+    seq: 0,
+    loadedAt: 0
+  };
 
   var MODE_PLACEHOLDERS = {
     web:      'Search anything or type a calculation…',
@@ -63,16 +90,54 @@
     code:     'Search code, repos, and documentation…'
   };
 
-  // ---------- UTC Clock ----------
-  function updateUTCClock() {
+  // ---------- Indian Standard Time (IST) Clock & Date ----------
+  function updateIndianDateTime() {
     var now = new Date();
-    var h = String(now.getUTCHours()).padStart(2, '0');
-    var m = String(now.getUTCMinutes()).padStart(2, '0');
-    var s = String(now.getUTCSeconds()).padStart(2, '0');
-    utcClock.textContent = 'UTC ' + h + ':' + m + ':' + s;
+    if (istClock) {
+      try {
+        var timeStr = now.toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Kolkata',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        });
+        istClock.textContent = timeStr + ' IST';
+      } catch (e) {
+        var istOffset = 5.5 * 60 * 60 * 1000;
+        var istDate = new Date(now.getTime() + istOffset);
+        var h = istDate.getUTCHours();
+        var ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        var hh = String(h).padStart(2, '0');
+        var mm = String(istDate.getUTCMinutes()).padStart(2, '0');
+        var ss = String(istDate.getUTCSeconds()).padStart(2, '0');
+        istClock.textContent = hh + ':' + mm + ':' + ss + ' ' + ampm + ' IST';
+      }
+    }
+
+    if (topDate) {
+      try {
+        var dateStr = now.toLocaleDateString('en-GB', {
+          timeZone: 'Asia/Kolkata',
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+        topDate.textContent = dateStr;
+      } catch (e) {
+        var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        var istOffset2 = 5.5 * 60 * 60 * 1000;
+        var istDate2 = new Date(now.getTime() + istOffset2);
+        topDate.textContent = days[istDate2.getUTCDay()] + ', ' + istDate2.getUTCDate() + ' ' + months[istDate2.getUTCMonth()] + ' ' + istDate2.getUTCFullYear();
+      }
+    }
   }
-  updateUTCClock();
-  setInterval(updateUTCClock, 1000);
+  updateIndianDateTime();
+  setInterval(updateIndianDateTime, 1000);
 
   // ---------- Sign-in prompt ----------
   function showSigninPrompt() {
@@ -112,12 +177,26 @@
     fetch('/api/me', { credentials: 'same-origin' })
       .then(function (r) { if (!r.ok) throw 0; return r.json(); })
       .then(function (d) {
+        if (!d || !d.email) throw new Error('guest');
         currentUser = d.email;
         if (feedbackEmail && !feedbackEmail.value) feedbackEmail.value = currentUser;
         renderUserArea();
+        invalidateHistoryCache();
+        // A search restored from the in-tab cache may have run before this
+        // request proved the visitor is signed in. Record it now.
+        if (pendingHistoryRecord) {
+          recordHistory(pendingHistoryRecord.query, pendingHistoryRecord.tab);
+          pendingHistoryRecord = null;
+        }
+        if (document.activeElement === searchInput && !searchInput.value.trim()) {
+          showRecentHistory();
+        }
       })
       .catch(function () {
         currentUser = null;
+        pendingHistoryRecord = null;
+        recentHistoryCache = { items: [], at: 0 };
+        if (suggestState.kind === 'history') closeSuggestions();
         renderUserArea();
         // Opening the site as a guest mirrors the usual sign-in prompt:
         // show it once, shortly after the page settles.
@@ -130,9 +209,12 @@
       userArea.innerHTML =
         '<div class="user-info">' +
           '<span class="user-email">' + esc(currentUser) + '</span>' +
-          '<button class="logout-btn" id="logoutBtn">Sign out</button>' +
+          '<button class="logout-btn history-btn" id="historyBtn" type="button">History</button>' +
+          '<button class="logout-btn" id="logoutBtn" type="button">Sign out</button>' +
         '</div>';
       document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+      var historyBtn = document.getElementById('historyBtn');
+      if (historyBtn) historyBtn.addEventListener('click', openHistory);
     } else {
       userArea.innerHTML =
         '<a href="' + escAttr(authUrl('/login')) + '" class="sign-in-link">Sign in</a>';
@@ -142,7 +224,19 @@
 
   function handleLogout() {
     fetch('/api/logout', { method: 'POST', credentials: 'same-origin' })
-      .finally(function () { currentUser = null; renderUserArea(); goHome(); });
+      .finally(function () {
+        currentUser = null;
+        pendingHistoryRecord = null;
+        recentHistoryCache = { items: [], at: 0 };
+        historyState.items = [];
+        historyState.total = 0;
+        historyState.hasMore = false;
+        historyState.seq += 1;
+        if (historyDialog && historyDialog.open) historyDialog.close();
+        if (suggestState.kind === 'history') closeSuggestions();
+        renderUserArea();
+        goHome();
+      });
   }
 
   // ---------- Search modes ----------
@@ -236,14 +330,15 @@
     doSearch(searchInput.value.trim(), true);
   });
 
-  // ---------- Live suggestions ----------
+  // ---------- Live suggestions + recent history ----------
   var suggestState = {
     timer: null,
     controller: null,
     items: [],
     active: -1,
     seq: 0,
-    lastQuery: ''
+    lastQuery: '',
+    kind: ''
   };
 
   function closeSuggestions() {
@@ -259,6 +354,7 @@
     suggestState.items = [];
     suggestState.active = -1;
     suggestState.seq += 1;
+    suggestState.kind = '';
     suggestionsEl.classList.add('hidden');
     suggestionsEl.replaceChildren();
     searchInput.setAttribute('aria-expanded', 'false');
@@ -281,22 +377,41 @@
     if (suggestState.active < 0) searchInput.removeAttribute('aria-activedescendant');
   }
 
-  function chooseSuggestion(text) {
+  function chooseSuggestion(entry) {
+    var text = typeof entry === 'string' ? entry : entry && entry.text;
+    var kind = typeof entry === 'string' ? 'web' : ((entry && entry.kind) || 'web');
+    if (kind === 'action') {
+      closeSuggestions();
+      openHistory();
+      return;
+    }
     if (!text) return;
     searchInput.value = text;
     closeSuggestions();
+    if (kind === 'history' && entry.tab && entry.tab !== currentMode) {
+      setMode(entry.tab, { rerun: false });
+    }
     doSearch(text);
   }
 
-  function renderSuggestions(items, typed) {
+  function renderSuggestions(items, typed, view) {
     if (!suggestionsEl) return;
-    suggestState.items = items.slice(0, 8);
+    suggestState.items = items.slice(0, 9);
     suggestState.active = -1;
+    suggestState.kind = view || 'suggestions';
     suggestionsEl.replaceChildren();
     if (!suggestState.items.length) {
       suggestionsEl.classList.add('hidden');
       searchInput.setAttribute('aria-expanded', 'false');
       return;
+    }
+
+    if (view === 'history') {
+      var heading = document.createElement('div');
+      heading.className = 'suggestion-heading';
+      heading.setAttribute('aria-hidden', 'true');
+      heading.textContent = 'Recent searches';
+      suggestionsEl.appendChild(heading);
     }
 
     suggestState.items.forEach(function (entry, index) {
@@ -306,6 +421,7 @@
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'suggestion-item';
+      if (kind === 'action') button.className += ' suggestion-action';
       button.id = 'suggestion-' + index;
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', 'false');
@@ -313,7 +429,10 @@
       var icon = document.createElement('span');
       icon.className = 'suggestion-icon suggestion-icon-' + kind;
       icon.setAttribute('aria-hidden', 'true');
-      icon.textContent = kind === 'popular' ? '↗' : (kind === 'local' ? '⌕' : 'W');
+      icon.textContent = kind === 'popular' ? '↗'
+        : (kind === 'local' ? '⌕'
+        : (kind === 'history' ? '↺'
+        : (kind === 'action' ? '→' : 'W')));
 
       var label = document.createElement('span');
       label.className = 'suggestion-text';
@@ -321,14 +440,16 @@
 
       var hint = document.createElement('span');
       hint.className = 'suggestion-kind';
-      hint.textContent = kind === 'popular' ? 'Popular' : (kind === 'local' ? 'On this site' : '');
+      hint.textContent = kind === 'popular' ? 'Popular'
+        : (kind === 'local' ? 'On this site'
+        : (kind === 'history' ? 'Recent' : ''));
 
       button.appendChild(icon);
       button.appendChild(label);
       if (hint.textContent) button.appendChild(hint);
       // pointerdown prevents the input blur before click.
       button.addEventListener('pointerdown', function (e) { e.preventDefault(); });
-      button.addEventListener('click', function () { chooseSuggestion(text); });
+      button.addEventListener('click', function () { chooseSuggestion(entry); });
       button.addEventListener('mouseenter', function () { updateSuggestionActive(index); });
       suggestionsEl.appendChild(button);
     });
@@ -337,10 +458,65 @@
     searchInput.setAttribute('aria-expanded', 'true');
   }
 
+  function renderRecentHistory(items) {
+    if (!items || !items.length) {
+      closeSuggestions();
+      return;
+    }
+    var entries = items.slice(0, 5).map(function (item) {
+      return { text: item.query, kind: 'history', tab: item.tab };
+    });
+    entries.push({ text: 'View all history', kind: 'action' });
+    renderSuggestions(entries, '', 'history');
+  }
+
+  function showRecentHistory() {
+    if (!suggestionsEl) return;
+    if (!currentUser || searchInput.value.trim()) {
+      closeSuggestions();
+      return;
+    }
+    if (suggestState.kind === 'history' &&
+        !suggestionsEl.classList.contains('hidden')) {
+      return;
+    }
+    if (recentHistoryCache.at &&
+        Date.now() - recentHistoryCache.at < 20000) {
+      renderRecentHistory(recentHistoryCache.items);
+      return;
+    }
+
+    var seq = ++suggestState.seq;
+    if (suggestState.controller) {
+      try { suggestState.controller.abort(); } catch (e) {}
+    }
+    var controller = window.AbortController ? new AbortController() : null;
+    suggestState.controller = controller;
+
+    fetch('/api/history?limit=5',
+          { credentials: 'same-origin', signal: controller ? controller.signal : undefined })
+      .then(function (r) {
+        if (!r.ok) throw new Error('history unavailable');
+        return r.json();
+      })
+      .then(function (data) {
+        if (seq !== suggestState.seq) return;
+        if (!currentUser || searchInput.value.trim()) return;
+        var items = data && Array.isArray(data.items) ? data.items : [];
+        recentHistoryCache = { items: items, at: Date.now() };
+        renderRecentHistory(items);
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        if (seq === suggestState.seq) closeSuggestions();
+      });
+  }
+
   function requestSuggestions(typed) {
     var query = (typed || '').trim();
-    if (!query) { closeSuggestions(); return; }
-    if (query === suggestState.lastQuery && suggestState.items.length) return;
+    if (!query) { showRecentHistory(); return; }
+    if (suggestState.kind === 'suggestions' &&
+        query === suggestState.lastQuery && suggestState.items.length) return;
     suggestState.lastQuery = query;
     var seq = ++suggestState.seq;
     if (suggestState.controller) {
@@ -359,7 +535,7 @@
         if (seq !== suggestState.seq) return;
         if (!searchInput.value.trim() || searchInput.value.trim() !== query) return;
         var items = data && Array.isArray(data.suggestions) ? data.suggestions : [];
-        renderSuggestions(items, query);
+        renderSuggestions(items, query, 'suggestions');
       })
       .catch(function (err) {
         if (err && err.name === 'AbortError') return;
@@ -372,7 +548,14 @@
 
   function scheduleSuggestions() {
     var query = searchInput.value.trim();
-    if (!query) { closeSuggestions(); return; }
+    if (!query) {
+      if (suggestState.timer) {
+        window.clearTimeout(suggestState.timer);
+        suggestState.timer = null;
+      }
+      showRecentHistory();
+      return;
+    }
     if (suggestState.timer) window.clearTimeout(suggestState.timer);
     suggestState.timer = window.setTimeout(function () {
       suggestState.timer = null;
@@ -382,6 +565,7 @@
 
   searchInput.addEventListener('input', scheduleSuggestions);
   searchInput.addEventListener('focus', scheduleSuggestions);
+  searchInput.addEventListener('click', scheduleSuggestions);
   searchInput.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
       if (!suggestionsEl.classList.contains('hidden')) {
@@ -397,12 +581,8 @@
       return;
     }
     if (e.key === 'Enter' && suggestState.active >= 0 && suggestState.items.length) {
-      var active = suggestState.items[suggestState.active];
-      var value = typeof active === 'string' ? active : active.text;
-      if (value) {
-        e.preventDefault();
-        chooseSuggestion(value);
-      }
+      e.preventDefault();
+      chooseSuggestion(suggestState.items[suggestState.active]);
     }
   });
 
@@ -410,6 +590,12 @@
     if (!suggestionsEl || suggestionsEl.classList.contains('hidden')) return;
     if (searchForm.contains(e.target)) return;
     closeSuggestions();
+  });
+
+  searchForm.addEventListener('focusout', function () {
+    window.setTimeout(function () {
+      if (!searchForm.contains(document.activeElement)) closeSuggestions();
+    }, 120);
   });
 
   // ---------- Landing category pills ----------
@@ -816,6 +1002,29 @@
     }
   }
 
+  // ---------- History helpers ----------
+  function invalidateHistoryCache() {
+    recentHistoryCache.at = 0;
+    historyState.loadedAt = 0;
+  }
+
+  function recordHistory(query, tab) {
+    if (!query) return;
+    invalidateHistoryCache();
+    try {
+      fetch('/api/history', {
+        method: 'POST',
+        credentials: 'same-origin',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: String(query).slice(0, MAX_QUERY),
+          tab: tab || currentMode
+        })
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   // A click can change the server-side order immediately. Drop this query
   // from the browser cache so the next search fetches the re-ranked page.
   function invalidateSearchCacheFor(query) {
@@ -958,6 +1167,7 @@
   function performSearch(query, page, lucky, historyMode) {
     query = (query || '').trim().slice(0, MAX_QUERY);
     if (!query) return;
+    if (page === 1) invalidateHistoryCache();
     if (currentMode === 'images' && !lucky) {
       performImageSearch(query, page, historyMode);
       return;
@@ -982,6 +1192,10 @@
     if (!lucky) {
       var cached = readSearchCache(cacheKey);
       if (cached) {
+        if (page === 1) {
+          if (currentUser) recordHistory(query, currentMode);
+          else pendingHistoryRecord = { query: query, tab: currentMode };
+        }
         currentPage = cached.page || page;
         syncAuthLinks();
         if (historyMode) updateUrl(query, currentPage, historyMode, currentMode);
@@ -1055,6 +1269,7 @@
   function performImageSearch(query, page, historyMode) {
     query = (query || '').trim().slice(0, MAX_QUERY);
     if (!query) return;
+    if (page === 1) invalidateHistoryCache();
     currentQuery = query;
     currentPage  = page;
     var seq = ++searchSeq;
@@ -1600,6 +1815,258 @@
     });
   }
 
+  // ---------- Per-account search history ----------
+  function openHistory() {
+    if (!currentUser) {
+      showSigninPrompt();
+      return;
+    }
+    if (!historyDialog) return;
+    closeSuggestions();
+    hideHistoryConfirm();
+    historyEmpty.textContent = HISTORY_EMPTY_TEXT;
+    historyEmpty.classList.add('hidden');
+    historyList.replaceChildren();
+    historyState.items = [];
+    historyState.total = 0;
+    historyState.hasMore = false;
+    historyState.loading = false;
+    historyState.seq += 1;
+    historySummary.textContent = HISTORY_DEFAULT_SUMMARY;
+    historyStatus.textContent = '';
+    updateHistoryFooter();
+    if (!historyDialog.open) {
+      if (typeof historyDialog.showModal === 'function') historyDialog.showModal();
+      else historyDialog.setAttribute('open', '');
+    }
+    loadHistory(false);
+  }
+
+  function closeHistory() {
+    if (historyDialog && historyDialog.open) historyDialog.close();
+  }
+
+  function hideHistoryConfirm() {
+    if (historyConfirm) historyConfirm.classList.add('hidden');
+    updateHistoryFooter();
+  }
+
+  function showHistoryConfirm() {
+    if (!historyConfirm) return;
+    historyConfirm.classList.remove('hidden');
+    if (historyClear) historyClear.classList.add('hidden');
+    if (historyClearCancel) historyClearCancel.focus();
+  }
+
+  function updateHistoryFooter() {
+    if (!historyFooter) return;
+    var hasItems = historyState.items.length > 0;
+    if (historyLoadMore) {
+      historyLoadMore.classList.toggle('hidden', !historyState.hasMore);
+      historyLoadMore.disabled = historyState.loading;
+      historyLoadMore.textContent = historyState.loading ? 'Loading…' : 'Load more';
+    }
+    if (historyClear) historyClear.classList.toggle('hidden', !hasItems);
+    historyFooter.classList.toggle('hidden', !hasItems && !historyState.hasMore);
+  }
+
+  function historyTabLabel(tab) {
+    return TAB_LABELS[tab] || TAB_LABELS.web;
+  }
+
+  function renderHistoryItems() {
+    if (!historyList) return;
+    historyList.replaceChildren();
+    var items = historyState.items;
+
+    if (!items.length) {
+      historyEmpty.textContent = HISTORY_EMPTY_TEXT;
+      historyEmpty.classList.remove('hidden');
+      historySummary.textContent = HISTORY_DEFAULT_SUMMARY;
+      updateHistoryFooter();
+      return;
+    }
+
+    historyEmpty.classList.add('hidden');
+    historySummary.textContent = 'Only you can see this. ' + historyState.total +
+      ' saved search' + (historyState.total === 1 ? '' : 'es') + '.';
+
+    items.forEach(function (item) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'history-item';
+
+      var icon = document.createElement('span');
+      icon.className = 'history-item-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = '↺';
+
+      var text = document.createElement('span');
+      text.className = 'history-item-text';
+
+      var query = document.createElement('span');
+      query.className = 'history-item-query';
+      query.textContent = item.query;
+      query.title = item.query;
+
+      var meta = document.createElement('span');
+      meta.className = 'history-item-meta';
+      meta.textContent = historyTabLabel(item.tab) +
+        (item.searched_at ? ' · ' + relativeTime(item.searched_at) : '');
+
+      var arrow = document.createElement('span');
+      arrow.className = 'history-item-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '→';
+
+      text.appendChild(query);
+      text.appendChild(meta);
+      button.appendChild(icon);
+      button.appendChild(text);
+      button.appendChild(arrow);
+      button.addEventListener('click', function () {
+        closeHistory();
+        if (item.tab && item.tab !== currentMode) {
+          setMode(item.tab, { rerun: false });
+        }
+        searchInput.value = item.query;
+        doSearch(item.query);
+      });
+      historyList.appendChild(button);
+    });
+
+    updateHistoryFooter();
+  }
+
+  function loadHistory(append) {
+    if (!currentUser || !historyDialog || historyState.loading) return;
+    historyState.loading = true;
+    var seq = ++historyState.seq;
+    var offset = append ? historyState.items.length : 0;
+    if (!append) {
+      historyList.replaceChildren();
+      historyEmpty.classList.add('hidden');
+      historyList.setAttribute('aria-busy', 'true');
+    }
+    historyStatus.textContent = 'Loading your history…';
+    updateHistoryFooter();
+
+    fetch('/api/history?limit=' + HISTORY_PAGE_SIZE + '&offset=' + offset,
+          { credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.status === 401) throw new Error('Sign in to see your search history.');
+        if (!r.ok) throw new Error('History is unavailable right now. Please try again.');
+        return r.json();
+      })
+      .then(function (data) {
+        if (seq !== historyState.seq) return;
+        var incoming = data && Array.isArray(data.items) ? data.items : [];
+        if (append) historyState.items = historyState.items.concat(incoming);
+        else historyState.items = incoming;
+        historyState.total = data && typeof data.total === 'number'
+          ? data.total : historyState.items.length;
+        historyState.hasMore = !!(data && data.has_more);
+        historyState.loadedAt = Date.now();
+        renderHistoryItems();
+        historyStatus.textContent = historyState.items.length
+          ? 'Showing ' + historyState.items.length + ' of ' + historyState.total +
+            ' saved searches.'
+          : 'No search history yet.';
+      })
+      .catch(function (err) {
+        if (seq !== historyState.seq) return;
+        var message = err && err.message ? err.message : 'History could not be loaded.';
+        if (!append) {
+          historyState.items = [];
+          historyState.total = 0;
+          historyState.hasMore = false;
+          historyList.replaceChildren();
+          historyEmpty.textContent = message;
+          historyEmpty.classList.remove('hidden');
+          historySummary.textContent = HISTORY_DEFAULT_SUMMARY;
+          updateHistoryFooter();
+        }
+        historyStatus.textContent = message;
+      })
+      .finally(function () {
+        if (seq !== historyState.seq) return;
+        historyState.loading = false;
+        historyList.removeAttribute('aria-busy');
+        updateHistoryFooter();
+      });
+  }
+
+  function clearAllHistory() {
+    if (!currentUser || !historyClearConfirm) return;
+    historyClearConfirm.disabled = true;
+    historyClearConfirm.textContent = 'Deleting…';
+
+    fetch('/api/history', { method: 'DELETE', credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('Could not clear history. Please try again.');
+      })
+      .then(function () {
+        historyState.items = [];
+        historyState.total = 0;
+        historyState.hasMore = false;
+        historyState.seq += 1;
+        recentHistoryCache = { items: [], at: Date.now() };
+        historyList.replaceChildren();
+        historyEmpty.textContent = HISTORY_EMPTY_TEXT;
+        historyEmpty.classList.remove('hidden');
+        historySummary.textContent = HISTORY_DEFAULT_SUMMARY;
+        historyStatus.textContent = 'Search history cleared.';
+        if (suggestState.kind === 'history') closeSuggestions();
+        hideHistoryConfirm();
+      })
+      .catch(function (err) {
+        historyStatus.textContent = err && err.message
+          ? err.message : 'Could not clear history. Please try again.';
+      })
+      .finally(function () {
+        historyClearConfirm.disabled = false;
+        historyClearConfirm.textContent = 'Delete all';
+      });
+  }
+
+  if (historyClose) {
+    historyClose.addEventListener('click', closeHistory);
+  }
+  if (historyDialog) {
+    historyDialog.addEventListener('click', function (e) {
+      // The backdrop and the dialog itself share a target. Only close when
+      // the click is actually outside the dialog box, so clicking its padding
+      // does nothing and keyboard activation is never mistaken for a backdrop
+      // click.
+      if (e.target !== historyDialog) return;
+      var rect = historyDialog.getBoundingClientRect();
+      var outside = e.clientX < rect.left || e.clientX > rect.right ||
+                    e.clientY < rect.top || e.clientY > rect.bottom;
+      if (outside) closeHistory();
+    });
+    historyDialog.addEventListener('close', function () {
+      historyState.seq += 1;
+      historyState.loading = false;
+      hideHistoryConfirm();
+      historyStatus.textContent = '';
+    });
+  }
+  if (historyLoadMore) {
+    historyLoadMore.addEventListener('click', function () { loadHistory(true); });
+  }
+  if (historyClear) {
+    historyClear.addEventListener('click', showHistoryConfirm);
+  }
+  if (historyClearCancel) {
+    historyClearCancel.addEventListener('click', function () {
+      hideHistoryConfirm();
+      if (historyClear) historyClear.focus();
+    });
+  }
+  if (historyClearConfirm) {
+    historyClearConfirm.addEventListener('click', clearAllHistory);
+  }
+
   // ---------- Helpers ----------
   function domainOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; }
@@ -1617,13 +2084,22 @@
 
   function relativeTime(dateStr) {
     try {
-      var diff = Date.now() - new Date(dateStr).getTime();
+      var then = new Date(dateStr).getTime();
+      if (!isFinite(then)) return '';
+      var diff = Math.max(0, Date.now() - then);
       var mins  = Math.floor(diff / 60000);
       var hours = Math.floor(diff / 3600000);
       var days  = Math.floor(diff / 86400000);
+      if (mins  < 1)   return 'just now';
       if (mins  < 60)  return mins  + ' minute'  + (mins  !== 1 ? 's' : '') + ' ago';
       if (hours < 24)  return hours + ' hour'    + (hours !== 1 ? 's' : '') + ' ago';
-      return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
+      if (days  < 30)  return days  + ' day'     + (days  !== 1 ? 's' : '') + ' ago';
+      if (days  < 365) {
+        var months = Math.floor(days / 30);
+        return months + ' month' + (months !== 1 ? 's' : '') + ' ago';
+      }
+      var years = Math.floor(days / 365);
+      return years + ' year' + (years !== 1 ? 's' : '') + ' ago';
     } catch (e) { return ''; }
   }
 

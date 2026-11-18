@@ -222,6 +222,9 @@ def test_empty_news_api_returns_a_clear_message_not_fake_stories(news_client):
 def test_stale_snapshot_triggers_background_revalidation(monkeypatch, news_client):
     calls: list[str] = []
     monkeypatch.setattr(news, "ensure_fresh_async", lambda: calls.append("refresh"))
+    # Pin the clock: the fixture stores a snapshot at NOW, and this test must
+    # not start failing just because the wall clock moved past NOW.
+    monkeypatch.setattr(news, "_now", lambda: NOW)
 
     _store([make_item(index) for index in range(30)])
     news_client.get("/api/news")

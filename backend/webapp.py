@@ -19,6 +19,7 @@ router = APIRouter()
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 INDEX_FILE = os.path.join(FRONTEND_DIR, "index.html")
 SET_DEFAULT_FILE = os.path.join(FRONTEND_DIR, "set-default.html")
+INSTALL_FILE = os.path.join(FRONTEND_DIR, "install.html")
 ABOUT_FILE = os.path.join(FRONTEND_DIR, "about.html")
 PRIVACY_FILE = os.path.join(FRONTEND_DIR, "privacy.html")
 TERMS_FILE = os.path.join(FRONTEND_DIR, "terms.html")
@@ -215,19 +216,28 @@ async def manifest(request: Request):
 
     root = base_url(request)
     payload = {
+        "id": "/",
         "name": "8search – answer-first search",
         "short_name": "8search",
         "description": "Answer-first search with a live satellite globe.",
+        "lang": "en",
+        "dir": "ltr",
         "start_url": "/",
         "scope": "/",
         "display": "standalone",
-        "background_color": "#141416",
-        "theme_color": "#141416",
+        "display_override": ["standalone", "minimal-ui"],
+        "orientation": "any",
+        "background_color": "#f5f2ec",
+        "theme_color": "#f5f2ec",
+        "categories": ["search", "news", "utilities"],
         "icons": [
             {"src": "/assets/favicon-32.png", "sizes": "32x32", "type": "image/png"},
             {"src": "/assets/icon-64.png", "sizes": "64x64", "type": "image/png"},
             {"src": "/assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png"},
+            {"src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
         ],
+        "prefer_related_applications": False,
         "search_url": root + "/search?q={searchTerms}",
     }
     return Response(
@@ -245,6 +255,11 @@ async def set_default(request: Request):
     template = template.replace("__QUERY_TEMPLATE__", root + "/search?q=%s")
     template = template.replace("__SEARCH_URL__", root + "/search?q=%s")
     return HTMLResponse(template)
+
+
+@router.get("/install", include_in_schema=False)
+async def install_page():
+    return FileResponse(INSTALL_FILE, media_type="text/html")
 
 
 @router.get("/about", include_in_schema=False)

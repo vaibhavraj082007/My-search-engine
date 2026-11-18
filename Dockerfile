@@ -18,11 +18,14 @@ RUN pip install -r requirements.txt
 COPY backend ./backend
 COPY frontend ./frontend
 COPY scripts ./scripts
+COPY data ./data_seed
 RUN mkdir -p /app/data
 
 ENV PORT=8000 \
     WEB_CONCURRENCY=4 \
-    FORWARDED_ALLOW_IPS=*
+    FORWARDED_ALLOW_IPS=* \
+    TRUST_PROXY=1 \
+    COOKIE_SECURE=1
 
 EXPOSE 8000
 

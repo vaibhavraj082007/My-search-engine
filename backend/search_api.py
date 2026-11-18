@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from fastapi import APIRouter, BackgroundTasks, Cookie, HTTPException, Query, Request, Response
 from starlette.concurrency import run_in_threadpool
 
-from . import clicks, ranking, searchdb, suggestions
+from . import clicks, history, ranking, searchdb, suggestions
 from .answers import (
     build_answer,
     get_http_client,
@@ -935,6 +935,25 @@ def _wiki_chunk_key(query: str, page: int) -> str:
     return f"8s:wiki:v1:{page}:{_normalize_query(query)}"
 
 
+async def _record_search_history(
+    user: str | None,
+    query: str,
+    tab: str,
+    page: int,
+) -> None:
+    """Save a signed-in user's first-page search without risking the search.
+
+    History failures must never turn a successful result page into an error,
+    so database problems are logged and swallowed here.
+    """
+    if not user or page != 1:
+        return
+    try:
+        await run_in_threadpool(history.record_search, user, query, tab)
+    except Exception:
+        traceback.print_exc()
+
+
 # ── Route ────────────────────────────────────────────────────────────────
 
 @router.get("/api/search")
@@ -1040,8 +1059,10 @@ async def search(
         # Buffer impressions off the request path; the periodic flusher writes
         # them in batches. This never affects guest search quota.
         background.add_task(clicks.record_page_impressions, query, ranked)
+        await _record_search_history(user, query, safe_tab, page)
         return ranked
 
+    await _record_search_history(user, query, safe_tab, page)
     return payload
 
 
@@ -1101,4 +1122,5 @@ async def image_search(
         )
 
     response.headers["X-Cache"] = "HIT" if cache_hit else "MISS"
+    await _record_search_history(user, query, "images", page)
     return payload

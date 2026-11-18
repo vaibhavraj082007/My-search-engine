@@ -549,6 +549,7 @@ Key endpoints:
 - **YouTube:** scraping results pages will be blocked at scale. Use the YouTube Data API.
 - **Map tiles:** OpenStreetMap and Esri tiles have usage limits. Switch to a commercial tile provider for heavy traffic.
 - **Authentication:** Add HTTPS, rate-limit failed logins, and consider OAuth for production.
+- **Durability:** run the backup service in `docker-compose.prod.yml` (verified snapshots every six hours, 30-day retention), copy `backups/` off the host, and test a restore. See [DEPLOY.md](DEPLOY.md#7-data-durability-and-backups).
 - **HTTPS and browser search:** follow [DEPLOY.md](DEPLOY.md); set `APP_BASE_URL`, `TRUST_PROXY`, `FORCE_HTTPS` and `COOKIE_SECURE`, then verify `/opensearch.xml` and `/set-default`.
 - **News:** feeds are public publisher RSS/Atom; keep the configured feed list curated and set `NEWS_CONTACT_EMAIL` to a real contact address.
 - **Crawler:** Maintain the 1-second delay and always respect `robots.txt`.

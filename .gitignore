@@ -10,4 +10,5 @@ backend/data/
 .click_secret
 data/.click_secret
 data/*.lock
+backups/
 .env

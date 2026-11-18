@@ -1,11 +1,18 @@
 # Production stack: Caddy terminates HTTPS, FastAPI runs on the private
-# Docker network, Redis provides shared caches and rate limits.
+# Docker network, Redis provides shared caches and rate limits, and a
+# companion service writes verified daily SQLite backups.
 #
 #   cp .env.production.example .env
 #   # edit .env, then:
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
 # Only Caddy publishes ports (80/443). The app port 8000 stays private.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   web:
@@ -27,12 +34,32 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    stop_grace_period: 40s
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
       start_period: 20s
       retries: 3
+
+  backup:
+    build: .
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+      BACKUP_DIR: /app/backups
+      BACKUP_KEEP_DAYS: "${BACKUP_KEEP_DAYS:-30}"
+      BACKUP_INTERVAL_SECONDS: "${BACKUP_INTERVAL_SECONDS:-21600}"
+    command:
+      - sh
+      - -c
+      - "while true; do python scripts/backup_data.py || exit 1; sleep $${BACKUP_INTERVAL_SECONDS:-21600}; done"
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    restart: unless-stopped
+    logging: *default-logging
 
   caddy:
     image: caddy:2-alpine
@@ -51,6 +78,7 @@ services:
       web:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
 
   redis:
     image: redis:7-alpine
@@ -70,6 +98,7 @@ services:
     volumes:
       - redis-data:/data
     restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   caddy-data:

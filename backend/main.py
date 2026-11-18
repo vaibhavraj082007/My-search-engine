@@ -1,16 +1,19 @@
 """8search API – main FastAPI application."""
 
 import asyncio
+import mimetypes
 import os
+import shutil
+import sqlite3
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, clicks, feedback, news, searchdb, suggestions
+from . import auth, clicks, feedback, history, news, searchdb, suggestions
 from .answers import close_http_client
 from .cache import cache
 from .lens import router as lens_router
@@ -18,20 +21,66 @@ from .ratelimit import RateLimiter, limiter
 from .search_api import router as search_router
 from .webapp import router as webapp_router
 
+# Register custom MIME types for platform installers
+mimetypes.add_type("application/x-apple-diskimage", ".dmg")
+mimetypes.add_type("application/vnd.android.package-archive", ".apk")
+mimetypes.add_type("application/x-msdownload", ".exe")
+mimetypes.add_type("application/x-apple-aspen-config", ".mobileconfig")
+
 STATIC_CACHE_EXTENSIONS = {
     ".css", ".js", ".mjs", ".png", ".jpg", ".jpeg", ".gif", ".webp",
     ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf", ".map",
-    ".webmanifest",
+    ".webmanifest", ".dmg", ".apk", ".exe", ".mobileconfig",
 }
 
 SUGGEST_RATE_LIMIT_PER_MINUTE = int(os.getenv("SUGGEST_RATE_LIMIT_PER_MINUTE", "600"))
 suggest_limiter = RateLimiter(limit=SUGGEST_RATE_LIMIT_PER_MINUTE)
 
 
+def _seed_data_if_empty():
+    """Seed data volume on first boot and sync seed users."""
+    seed_dir = os.path.join(os.path.dirname(__file__), "..", "data_seed")
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    if os.path.isdir(seed_dir) and os.path.isdir(data_dir):
+        for fname in os.listdir(seed_dir):
+            if fname.endswith((".shm", ".wal", ".lock")):
+                continue
+            src = os.path.join(seed_dir, fname)
+            dst = os.path.join(data_dir, fname)
+            if not os.path.exists(dst) and os.path.isfile(src):
+                try:
+                    shutil.copy2(src, dst)
+                except Exception:
+                    pass
+        # Sync users from seed into data/users.db so account updates take effect
+        seed_users_db = os.path.join(seed_dir, "users.db")
+        target_users_db = os.path.join(data_dir, "users.db")
+        if os.path.isfile(seed_users_db) and os.path.isfile(target_users_db):
+            try:
+                s_conn = sqlite3.connect(seed_users_db)
+                t_conn = sqlite3.connect(target_users_db)
+                s_cur = s_conn.cursor()
+                t_cur = t_conn.cursor()
+                s_cur.execute("SELECT email, password_hash, created_at FROM users")
+                for email, pwd_hash, created_at in s_cur.fetchall():
+                    t_cur.execute(
+                        "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?) "
+                        "ON CONFLICT(email) DO UPDATE SET password_hash=excluded.password_hash",
+                        (email, pwd_hash, created_at),
+                    )
+                t_conn.commit()
+                s_conn.close()
+                t_conn.close()
+            except Exception:
+                pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize databases and shared runtime resources on startup."""
+    _seed_data_if_empty()
     auth.init_db()
+    history.init_db()
     feedback.init_db()
     searchdb.init_db()
     clicks.init_db()
@@ -85,6 +134,9 @@ async def response_headers(request: Request, call_next):
             response.headers["Cache-Control"] = "no-store"
     elif path in {"/health", "/ready"}:
         response.headers["Cache-Control"] = "no-store"
+    elif path == "/sw.js":
+        # Service worker updates must be checked on every visit.
+        response.headers["Cache-Control"] = "no-cache"
     elif extension in STATIC_CACHE_EXTENSIONS:
         if "v=" in request.url.query:
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
@@ -144,6 +196,7 @@ async def ready():
 
 # Include API routers
 app.include_router(auth.router)
+app.include_router(history.router)
 app.include_router(clicks.router)
 app.include_router(feedback.router)
 app.include_router(lens_router)
@@ -152,10 +205,45 @@ app.include_router(suggestions.router)
 app.include_router(news.router)
 app.include_router(webapp_router)
 
+FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+
+
+@app.get("/download/{platform}")
+async def download_installer(platform: str):
+    """Direct, forced attachment download for native installers."""
+    platform = platform.lower().strip()
+    downloads_map = {
+        "mac": ("8search.dmg", "application/x-apple-diskimage"),
+        "dmg": ("8search.dmg", "application/x-apple-diskimage"),
+        "android": ("8search.apk", "application/vnd.android.package-archive"),
+        "apk": ("8search.apk", "application/vnd.android.package-archive"),
+        "windows": ("8search-Setup.exe", "application/x-msdownload"),
+        "exe": ("8search-Setup.exe", "application/x-msdownload"),
+        "ios": ("8search.mobileconfig", "application/x-apple-aspen-config"),
+        "mobileconfig": ("8search.mobileconfig", "application/x-apple-aspen-config"),
+    }
+    if platform not in downloads_map:
+        raise HTTPException(status_code=404, detail="Platform installer not found")
+
+    filename, media_type = downloads_map[platform]
+    filepath = os.path.join(FRONTEND_DIR, "downloads", filename)
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="Installer file missing")
+
+    return FileResponse(
+        filepath,
+        filename=filename,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
 # Mount frontend static files – served at "/" with html=True so
 # index.html is served for the root path and other .html files
 # are served by their path. Browser-facing routes above must stay
 # registered before this mount.
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.isdir(FRONTEND_DIR):
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

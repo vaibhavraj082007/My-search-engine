@@ -322,7 +322,13 @@ def logout(
 
 
 @router.get("/api/me")
-def me(user: str = Depends(require_user)):
+def me(user: str | None = Depends(get_current_user)):
+    """Return the signed-in email, or null for guests.
+
+    Guests are a normal state for the homepage, so this endpoint answers with
+    200 and a null email instead of a 401. Browsers log every failed request
+    to the console, and an expected guest check should not look like an error.
+    """
     return {"email": user}
 
 
@@ -380,6 +386,11 @@ def forgot_password(body: ForgotPasswordRequest, background: BackgroundTasks):
         reset_url,
         RESET_TOKEN_TTL_MINUTES,
     )
+    if not emailer.is_configured():
+        return {
+            "message": "Click the link below to set a new password for your account:",
+            "reset_url": reset_url,
+        }
     return generic
 
 

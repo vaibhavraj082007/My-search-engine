@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=20261117-5">
+  <link rel="stylesheet" href="/style.css?v=20261118-10">
 </head>
 <body class="landing-page legal-page">
   <header class="top-bar">
@@ -55,6 +55,7 @@
       <ul>
         <li>An account stores your email address and a one-way hash of your password. The plain password is never stored.</li>
         <li>A random session token is kept in an HttpOnly, SameSite=Lax cookie for up to 30 days so you stay signed in. Sessions and password-reset tokens are stored in the server database; reset tokens are hashed and expire.</li>
+        <li>When you are signed in, the first page of each search you make (Web, AI Answer, Images or Code) saves the query and tab in a private search history on your account so you can reopen it from the search bar. Repeating a query refreshes its place instead of creating a duplicate. Guests do not get saved history. History is visible only to the account that created it, and you can erase it at any time with <strong>History → Clear history</strong>.</li>
         <li>If email delivery is configured, sign-in notices and password-reset emails are sent to your address. Those security notices can include the time, an approximate IP address, and a browser/device string.</li>
       </ul>
     </article>
@@ -113,19 +114,21 @@
     <article class="legal-card">
       <h2>Storage, security and your choices</h2>
       <p>
-        Account, click, feedback, suggestion and news data live in SQLite databases on the server
-        that runs 8search. Production deployments use HTTPS, secure cookies, salted hashes and
-        regular backups. No system is perfectly secure, but the service is built to keep the
-        sensitive parts hashed and the raw personal data minimal.
+        Account, search-history, click, feedback, suggestion and news data live in SQLite
+        databases on the server that runs 8search. Production deployments use HTTPS, secure
+        cookies, salted hashes and regular backups. Search history stays until you clear it or
+        the account is removed. No system is perfectly secure, but the service is built to keep
+        the sensitive parts hashed and the raw personal data minimal.
       </p>
       <p>
-        Clearing your browser cookies removes the guest counter and your session. To ask about
-        data associated with an account, use the feedback form on the homepage.
+        Clearing your browser cookies removes the guest counter and your session. Signed-in
+        users can clear their search history from the History panel at any time. To ask about
+        other data associated with an account, use the feedback form on the homepage.
         <!-- TODO(owner): there is no self-service account-deletion endpoint in the code yet. Add one, or document the manual process here. -->
       </p>
     </article>
 
-    <p class="legal-note">Last updated: 17 November 2026. See also the <a href="/terms">Terms</a>.</p>
+    <p class="legal-note">Last updated: 18 November 2026. See also the <a href="/terms">Terms</a>.</p>
   </main>
 
   <footer class="site-footer">
@@ -137,6 +140,8 @@
       <a class="footer-link" href="/terms">Terms</a>
       <span class="footer-dot" aria-hidden="true">·</span>
       <a class="footer-link footer-default-link" href="/set-default">Set 8search as default</a>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <a class="footer-link" href="/install">Get the app</a>
     </nav>
     <p class="footer-note">© 2026 8search</p>
   </footer>

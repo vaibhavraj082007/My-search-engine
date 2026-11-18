@@ -4,7 +4,10 @@ venv
 .venv
 __pycache__
 *.pyc
-data
+data/*.shm
+data/*.wal
+data/*.lock
+backups
 backend/.env
 .env
 *.log

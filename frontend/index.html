@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#141416">
+  <meta name="theme-color" content="#f5f2ec">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="8search">
   <title>8search</title>
   <meta name="description" content="8search is an answer-first search engine with quick answers, real news, and a live globe.">
   <link rel="icon" href="/favicon.ico" sizes="any">
@@ -14,15 +18,34 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261117-5">
+  <link rel="stylesheet" href="style.css?v=20261118-16">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body class="landing-page">
   <!-- Top Bar -->
   <header class="top-bar">
-    <a href="/" class="top-bar-logo"><span class="logo-8">8</span>search</a>
+    <div class="top-bar-left">
+      <span id="topDate" class="top-date" aria-label="Current date in India"></span>
+      <a href="/" class="top-bar-logo"><span class="logo-8">8</span>search</a>
+      <button type="button" id="bgToggleBtn" class="bg-toggle-btn" aria-label="Customize wallpaper" title="Customize wallpaper">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+        <span class="bg-toggle-label">Wallpaper</span>
+      </button>
+    </div>
     <div class="top-bar-right">
-      <span id="utcClock" class="utc-clock"></span>
+      <span id="istClock" class="ist-clock" aria-label="Current Indian Standard Time"></span>
+      <button type="button" id="homeInstallBtn" class="download-app-btn" aria-label="Download 8search app for your device">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span>Download App</span>
+      </button>
       <div id="userArea">
         <a href="/login" class="sign-in-link">Sign in</a>
       </div>
@@ -120,7 +143,7 @@
 
       <button type="button" class="shortcut" data-shortcut="wikipedia" aria-label="Search Wikipedia">
         <span class="shortcut-icon shortcut-icon-wikipedia">
-          <span class="shortcut-glyph">W</span>
+          <span class="shortcut-glyph" aria-hidden="true"></span>
         </span>
         <span class="shortcut-label">Wikipedia</span>
       </button>
@@ -136,7 +159,7 @@
         <span class="shortcut-label">News</span>
       </button>
 
-      <button type="button" class="shortcut" data-shortcut="maps" aria-label="Open the map">
+      <button type="button" class="shortcut" data-shortcut="maps" aria-label="Open maps">
         <span class="shortcut-icon shortcut-icon-maps">
           <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0z"></path>
@@ -157,7 +180,7 @@
         <span class="shortcut-label">Weather</span>
       </button>
 
-      <button type="button" class="shortcut shortcut-add" id="addShortcutBtn" aria-label="Add a shortcut">
+      <button type="button" class="shortcut shortcut-add" id="addShortcutBtn" aria-label="Add New shortcut">
         <span class="shortcut-icon shortcut-icon-add">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14"></path>
@@ -301,13 +324,15 @@
       <a class="footer-link" href="/terms">Terms</a>
       <span class="footer-dot" aria-hidden="true">·</span>
       <a class="footer-link footer-default-link" href="/set-default">Set 8search as default</a>
+      <span class="footer-dot" aria-hidden="true">·</span>
+      <a class="footer-link" href="/install">Get the app</a>
     </nav>
     <p class="footer-note">© 2026 8search</p>
   </footer>
 
   <!-- Weather Panel -->
   <aside id="weatherPanel" class="weather-panel hidden">
-    <button id="weatherClose" class="weather-close">&times;</button>
+    <button id="weatherClose" class="weather-close" aria-label="Close weather panel">&times;</button>
     <div id="weatherContent" class="weather-content">
       <div class="weather-loading">Loading weather…</div>
     </div>
@@ -316,7 +341,7 @@
   <!-- Login Prompt Banner -->
   <div id="loginBanner" class="login-banner hidden">
     <p>You've used your free searches. <a href="/login" class="banner-link">Sign in</a> for unlimited searching!</p>
-    <button id="bannerDismiss" class="banner-dismiss">&times;</button>
+    <button id="bannerDismiss" class="banner-dismiss" aria-label="Dismiss sign-in banner">&times;</button>
   </div>
 
   <!-- Sign-in prompt shown to guests on first visit -->
@@ -340,6 +365,386 @@
     <button type="button" class="info-close" id="infoClose" aria-label="Close">&times;</button>
     <h2 id="infoTitle" class="info-title"></h2>
     <div id="infoBody" class="info-body"></div>
+  </dialog>
+
+  <!-- Private per-account search history -->
+  <dialog id="historyDialog" class="history-dialog" aria-labelledby="historyTitle" aria-describedby="historySummary">
+    <button type="button" class="history-close" id="historyClose" aria-label="Close search history">&times;</button>
+    <p class="history-eyebrow">Your account</p>
+    <h2 id="historyTitle" class="history-title">Search history</h2>
+    <p id="historySummary" class="history-summary">Only you can see this. Searches are saved when you are signed in.</p>
+
+    <div id="historyList" class="history-list" role="group" aria-label="Your searches"></div>
+    <p id="historyEmpty" class="history-empty hidden">No searches yet. Your searches will appear here after you search while signed in.</p>
+
+    <div class="history-footer" id="historyFooter">
+      <button type="button" id="historyLoadMore" class="history-load-more hidden">Load more</button>
+      <button type="button" id="historyClear" class="history-clear">Clear history</button>
+    </div>
+
+    <div id="historyConfirm" class="history-confirm hidden" role="group" aria-label="Confirm clearing search history">
+      <p>Delete your entire search history?</p>
+      <div class="history-confirm-actions">
+        <button type="button" id="historyClearConfirm" class="history-danger">Delete all</button>
+        <button type="button" id="historyClearCancel" class="history-cancel">Keep it</button>
+      </div>
+    </div>
+
+    <p id="historyStatus" class="visually-hidden" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <!-- Wallpaper Customization Dialog -->
+  <dialog id="bgDialog" class="bg-dialog" aria-labelledby="bgDialogTitle">
+    <button type="button" class="bg-dialog-close" id="bgDialogClose" aria-label="Close wallpaper settings">&times;</button>
+    <div class="bg-dialog-head">
+      <h2 id="bgDialogTitle" class="bg-dialog-title">Customize Wallpaper</h2>
+      <p class="bg-dialog-subtitle">Choose from 20+ wallpapers or upload your own photo.</p>
+    </div>
+
+    <!-- Genre filter chips -->
+    <div class="bg-genre-chips" id="bgGenreChips" role="tablist" aria-label="Wallpaper categories">
+      <button type="button" class="bg-genre-chip active" data-genre="all">All (20)</button>
+      <button type="button" class="bg-genre-chip" data-genre="nature">Nature</button>
+      <button type="button" class="bg-genre-chip" data-genre="space">Space</button>
+      <button type="button" class="bg-genre-chip" data-genre="city">City</button>
+      <button type="button" class="bg-genre-chip" data-genre="abstract">Abstract</button>
+      <button type="button" class="bg-genre-chip" data-genre="art">Art</button>
+    </div>
+
+    <div class="bg-presets-grid" id="bgPresetsGrid">
+      <button type="button" class="bg-preset-card active" data-bg="default" data-genre="all" aria-label="Classic 8search background">
+        <div class="bg-preset-thumb bg-thumb-default"></div>
+        <span>Classic</span>
+      </button>
+      <!-- Nature -->
+      <button type="button" class="bg-preset-card" data-bg="aurora" data-genre="nature" aria-label="Aurora Northern Lights">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Aurora</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="alpine" data-genre="nature" aria-label="Alpine Mountain Peaks">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Alpine</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="forest" data-genre="nature" aria-label="Misty Pines Forest">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Forest</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="ocean" data-genre="nature" aria-label="Sunset Ocean Beach">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Ocean</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="autumn" data-genre="nature" aria-label="Autumn Reflections">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1476820865390-c52aeebb9891?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Autumn</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="desert" data-genre="nature" aria-label="Sahara Dunes Sunset">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Dunes</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="waterfall" data-genre="nature" aria-label="Iceland Waterfall">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Waterfall</span>
+      </button>
+
+      <!-- Space -->
+      <button type="button" class="bg-preset-card" data-bg="galaxy" data-genre="space" aria-label="Deep Andromeda Galaxy">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Galaxy</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="moon" data-genre="space" aria-label="Earth and Moon Orbit">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Moon</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="nebula" data-genre="space" aria-label="Glowing Cosmic Nebula">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Nebula</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="starlit" data-genre="space" aria-label="Milky Way Snowy Peak">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Milky Way</span>
+      </button>
+
+      <!-- City -->
+      <button type="button" class="bg-preset-card" data-bg="tokyo" data-genre="city" aria-label="Tokyo Neon Night">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Tokyo</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="nyc" data-genre="city" aria-label="New York Skyline Sunset">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>New York</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="cyberpunk" data-genre="city" aria-label="Cyberpunk Rain City">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Cyberpunk</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="bridge" data-genre="city" aria-label="Golden Gate Fog Bridge">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>San Francisco</span>
+      </button>
+
+      <!-- Abstract -->
+      <button type="button" class="bg-preset-card" data-bg="emerald" data-genre="abstract" aria-label="Emerald Fluid Waves">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Emerald</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="obsidian" data-genre="abstract" aria-label="Dark Obsidian Waves">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Obsidian</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="pastel" data-genre="abstract" aria-label="Pastel Gradient">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Pastel</span>
+      </button>
+
+      <!-- Art -->
+      <button type="button" class="bg-preset-card" data-bg="sakura" data-genre="art" aria-label="Cherry Blossoms Fuji">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1522383225653-ed111181a951?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Sakura</span>
+      </button>
+      <button type="button" class="bg-preset-card" data-bg="sunset_clouds" data-genre="art" aria-label="Dreamy Sunset Clouds">
+        <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=300&q=70');"></div>
+        <span>Sky Dream</span>
+      </button>
+    </div>
+
+    <div class="bg-upload-section">
+      <input type="file" id="customBgFileInput" accept="image/*" class="visually-hidden">
+      <button type="button" id="customBgUploadBtn" class="bg-upload-btn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>Upload your own photo</span>
+      </button>
+      <button type="button" id="customBgResetBtn" class="bg-reset-btn">Reset to Classic</button>
+    </div>
+  </dialog>
+
+  <!-- Download / Install Dialog for Android, iOS, Windows & Mac -->
+  <dialog id="downloadDialog" class="download-dialog" aria-labelledby="downloadDialogTitle">
+    <button type="button" class="download-close" id="downloadClose" aria-label="Close download dialog">&times;</button>
+    <div class="download-dialog-head">
+      <div class="download-badge">
+        <span class="logo-8">8</span>
+      </div>
+      <div>
+        <h2 id="downloadDialogTitle" class="download-title">Download 8search App</h2>
+        <p class="download-subtitle">Fast, standalone search for Android, iOS, Windows & Mac.</p>
+      </div>
+    </div>
+
+    <!-- Direct 1-click install button (when browser supports PWA prompt) -->
+    <div id="directInstallWrapper" class="download-direct-box">
+      <a id="directInstallBtn" class="download-primary-btn" href="/download/mac" download="8search.dmg">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        <span id="directInstallLabel">Download 8search for macOS (.dmg)</span>
+      </a>
+      <p id="directInstallNote" class="download-direct-note">Instant direct download · Standalone app · No app store needed.</p>
+    </div>
+
+    <!-- Platform selector tabs -->
+    <div class="download-tabs" role="tablist" aria-label="Select Operating System">
+      <button type="button" class="download-tab active" data-platform="mac" role="tab" aria-selected="true" aria-controls="pane-mac">
+        <span></span> macOS
+      </button>
+      <button type="button" class="download-tab" data-platform="ios" role="tab" aria-selected="false" aria-controls="pane-ios">
+        <span>📱</span> iOS
+      </button>
+      <button type="button" class="download-tab" data-platform="android" role="tab" aria-selected="false" aria-controls="pane-android">
+        <span>🤖</span> Android
+      </button>
+      <button type="button" class="download-tab" data-platform="windows" role="tab" aria-selected="false" aria-controls="pane-windows">
+        <span>🪟</span> Windows
+      </button>
+    </div>
+
+    <!-- Platform panes -->
+    <div class="download-panes">
+      <div id="pane-mac" class="download-pane active" role="tabpanel">
+        <a href="/download/mac" class="download-action-btn mac-btn" id="macDmgBtn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Download 8search for macOS (.dmg)</span>
+        </a>
+        <div class="download-sub-actions">
+          <button type="button" id="macWeblocBtn" class="download-sub-btn">Or download 1-click Desktop Shortcut (.webloc)</button>
+        </div>
+        <div class="download-step-list">
+          <div class="download-step">
+            <span class="step-num">1</span>
+            <div>
+              <strong>Open 8search.dmg:</strong>
+              <p>Double-click the downloaded <code>8search.dmg</code> in your Downloads.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">2</span>
+            <div>
+              <strong>Drag to Applications:</strong>
+              <p>Drag the 8search app icon into the Applications folder or your Dock.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">3</span>
+            <div>
+              <strong>Standalone App:</strong>
+              <p>8search opens in its own window with zero browser bars or tabs!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pane-ios" class="download-pane" role="tabpanel" hidden>
+        <div class="ios-highlight-guide">
+          <div class="ios-guide-header">
+            <strong>📲 How to install on your iPhone / iPad:</strong>
+          </div>
+          <div class="download-step-list">
+            <div class="download-step">
+              <span class="step-num">1</span>
+              <div>
+                <strong>Tap Safari Share button:</strong>
+                <p>In Safari at the bottom of the screen, tap the <strong>Share</strong> button (the square with arrow pointing up &uarr;).</p>
+              </div>
+            </div>
+            <div class="download-step">
+              <span class="step-num">2</span>
+              <div>
+                <strong>Choose Add to Home Screen:</strong>
+                <p>Scroll down the share sheet and tap <strong>Add to Home Screen</strong> (the ⊕ icon).</p>
+              </div>
+            </div>
+            <div class="download-step">
+              <span class="step-num">3</span>
+              <div>
+                <strong>Tap Add:</strong>
+                <p>Tap <strong>Add</strong> in the top right. 8search will be installed directly on your Home Screen as a standalone app!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="download-sub-actions" style="margin-top:14px;">
+          <a href="/download/ios" class="download-action-btn ios-btn" id="iosProfileBtn">
+            <span>Or Download iOS Profile (.mobileconfig)</span>
+          </a>
+          <p style="font-size:0.75rem;color:#7c766b;margin:4px 0 0;">After downloading profile: open Settings &rarr; tap Profile Downloaded &rarr; tap Install.</p>
+        </div>
+      </div>
+
+      <div id="pane-android" class="download-pane" role="tabpanel" hidden>
+        <a href="/download/android" class="download-action-btn android-btn" id="androidApkBtn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Download 8search for Android (.apk)</span>
+        </a>
+        <div class="download-sub-actions">
+          <button type="button" id="androidPwaBtn" class="download-sub-btn">Or 1-Click Install to Phone (PWA)</button>
+        </div>
+        <div class="download-step-list">
+          <div class="download-step">
+            <span class="step-num">1</span>
+            <div>
+              <strong>Download & Tap:</strong>
+              <p>Tap the download button above. When <code>8search.apk</code> finishes, tap it to install.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">2</span>
+            <div>
+              <strong>Install App:</strong>
+              <p>Confirm the install prompt on your phone.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">3</span>
+            <div>
+              <strong>Launch from Home Screen:</strong>
+              <p>8search is added to your Home Screen and App Drawer as a standalone app.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pane-windows" class="download-pane" role="tabpanel" hidden>
+        <a href="/download/windows" class="download-action-btn win-btn" id="winExeBtn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Download 8search for Windows (.exe)</span>
+        </a>
+        <div class="download-sub-actions">
+          <button type="button" id="winUrlBtn" class="download-sub-btn">Or download Desktop Shortcut (.url)</button>
+        </div>
+        <div class="download-step-list">
+          <div class="download-step">
+            <span class="step-num">1</span>
+            <div>
+              <strong>Run 8search-Setup.exe:</strong>
+              <p>Double-click the downloaded setup file.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">2</span>
+            <div>
+              <strong>Instant Shortcuts:</strong>
+              <p>Setup creates 8search shortcuts directly on your Desktop and Start Menu.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">3</span>
+            <div>
+              <strong>Standalone Window:</strong>
+              <p>8search launches in its own dedicated window without browser bars.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+        <div class="download-sub-actions">
+          <button type="button" id="winUrlBtn" class="download-sub-btn">Or download Desktop Shortcut (.url)</button>
+        </div>
+        <div class="download-step-list">
+          <div class="download-step">
+            <span class="step-num">1</span>
+            <div>
+              <strong>Run Setup:</strong>
+              <p>Double-click the downloaded <code>8search-Setup.exe</code>.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">2</span>
+            <div>
+              <strong>Instant Desktop & Start Shortcuts:</strong>
+              <p>The installer places 8search on your Desktop and Start Menu.</p>
+            </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">3</span>
+            <div>
+              <strong>Launch Anytime:</strong>
+              <p>Open 8search anytime directly from your Desktop or Taskbar.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="download-dialog-foot">
+      <a href="/install" class="download-full-guide">Full installation guide & troubleshooting &rarr;</a>
+    </div>
   </dialog>
 
   <!-- In-app visual search camera (Lens-style) -->
@@ -482,7 +887,9 @@
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script defer src="vendor/jsQR.js?v=20261115-1"></script>
   <script defer src="news.js?v=20261117-5"></script>
-  <script defer src="app.js?v=20261117-5"></script>
+  <script defer src="app.js?v=20261118-7"></script>
+  <script defer src="pwa.js?v=20261118-6"></script>
+  <script defer src="wallpaper.js?v=20261118-2"></script>
   <script defer src="map.js?v=20261114-7"></script>
   <script defer src="lens.js?v=20261115-3"></script>
 </body>
