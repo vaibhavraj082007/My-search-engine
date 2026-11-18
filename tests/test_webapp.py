@@ -264,3 +264,26 @@ def test_landing_page_has_trending_peek_and_ai_fab():
     assert 'href="#trendingNews"' in body
     assert 'id="askAiFab"' in body
     assert "defer" in body
+
+
+def test_download_installer_all_platforms(client):
+    for platform in ("mac", "android", "windows", "ios"):
+        res_get = client.get(f"/download/{platform}")
+        assert res_get.status_code == 200
+        assert "content-disposition" in res_get.headers
+        assert "attachment" in res_get.headers["content-disposition"]
+        assert len(res_get.content) > 0
+
+        res_head = client.head(f"/download/{platform}")
+        assert res_head.status_code == 200
+        assert "content-disposition" in res_head.headers
+
+
+def test_top_bar_has_date_clock_and_responsive_download(client):
+    body = (ROOT / "frontend/index.html").read_text(encoding="utf-8")
+    assert 'id="topDate"' in body
+    assert 'id="istClock"' in body
+    assert 'class="download-btn-label"' in body
+    assert 'class="dl-full"' in body
+    assert 'id="bgToggleBtn"' in body
+

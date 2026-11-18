@@ -11,7 +11,7 @@ import re
 from urllib.parse import urlencode, urlparse
 from xml.etree import ElementTree as ET
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 router = APIRouter()
@@ -275,3 +275,37 @@ async def privacy_page():
 @router.get("/terms", include_in_schema=False)
 async def terms_page():
     return FileResponse(TERMS_FILE, media_type="text/html")
+
+
+@router.api_route("/download/{platform}", methods=["GET", "HEAD"], include_in_schema=False)
+async def download_installer(platform: str):
+    """Direct, forced attachment download for native installers."""
+    platform = platform.lower().strip()
+    downloads_map = {
+        "mac": ("8search.dmg", "application/x-apple-diskimage"),
+        "dmg": ("8search.dmg", "application/x-apple-diskimage"),
+        "android": ("8search.apk", "application/vnd.android.package-archive"),
+        "apk": ("8search.apk", "application/vnd.android.package-archive"),
+        "windows": ("8search-Setup.exe", "application/x-msdownload"),
+        "exe": ("8search-Setup.exe", "application/x-msdownload"),
+        "ios": ("8search.mobileconfig", "application/x-apple-aspen-config"),
+        "mobileconfig": ("8search.mobileconfig", "application/x-apple-aspen-config"),
+    }
+    if platform not in downloads_map:
+        raise HTTPException(status_code=404, detail="Platform installer not found")
+
+    filename, media_type = downloads_map[platform]
+    filepath = os.path.join(FRONTEND_DIR, "downloads", filename)
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="Installer file missing")
+
+    return FileResponse(
+        filepath,
+        filename=filename,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
+

@@ -208,39 +208,6 @@ app.include_router(webapp_router)
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
 
-@app.get("/download/{platform}")
-async def download_installer(platform: str):
-    """Direct, forced attachment download for native installers."""
-    platform = platform.lower().strip()
-    downloads_map = {
-        "mac": ("8search.dmg", "application/x-apple-diskimage"),
-        "dmg": ("8search.dmg", "application/x-apple-diskimage"),
-        "android": ("8search.apk", "application/vnd.android.package-archive"),
-        "apk": ("8search.apk", "application/vnd.android.package-archive"),
-        "windows": ("8search-Setup.exe", "application/x-msdownload"),
-        "exe": ("8search-Setup.exe", "application/x-msdownload"),
-        "ios": ("8search.mobileconfig", "application/x-apple-aspen-config"),
-        "mobileconfig": ("8search.mobileconfig", "application/x-apple-aspen-config"),
-    }
-    if platform not in downloads_map:
-        raise HTTPException(status_code=404, detail="Platform installer not found")
-
-    filename, media_type = downloads_map[platform]
-    filepath = os.path.join(FRONTEND_DIR, "downloads", filename)
-    if not os.path.isfile(filepath):
-        raise HTTPException(status_code=404, detail="Installer file missing")
-
-    return FileResponse(
-        filepath,
-        filename=filename,
-        media_type=media_type,
-        headers={
-            "Cache-Control": "public, max-age=3600",
-            "Content-Disposition": f'attachment; filename="{filename}"',
-        },
-    )
-
-
 # Mount frontend static files – served at "/" with html=True so
 # index.html is served for the root path and other .html files
 # are served by their path. Browser-facing routes above must stay
