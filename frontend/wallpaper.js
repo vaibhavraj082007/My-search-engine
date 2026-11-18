@@ -36,6 +36,8 @@
     sunset_clouds: "https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=2000&q=80"
   };
 
+  var DEFAULT_PRESET = "nyc";
+
   var bgToggleBtn = document.getElementById("bgToggleBtn");
   var bgDialog = document.getElementById("bgDialog");
   var bgDialogClose = document.getElementById("bgDialogClose");
@@ -44,21 +46,28 @@
   var customBgFileInput = document.getElementById("customBgFileInput");
   var customBgUploadBtn = document.getElementById("customBgUploadBtn");
   var customBgResetBtn = document.getElementById("customBgResetBtn");
+  var bgFixedLayer = document.getElementById("bgFixedLayer");
 
   function applyWallpaper(url, presetName) {
     if (!url) {
       document.body.classList.remove("has-custom-bg");
       document.body.style.backgroundImage = "";
+      if (bgFixedLayer) bgFixedLayer.style.backgroundImage = "";
       try {
+        localStorage.setItem(PRESET_KEY, "classic");
         localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(PRESET_KEY);
       } catch (e) {}
       updateActiveCard("default");
       return;
     }
 
     document.body.classList.add("has-custom-bg");
-    document.body.style.backgroundImage = "url('" + url.replace(/'/g, "\\'") + "')";
+    var bgCss = "url('" + url.replace(/'/g, "\\'") + "')";
+    if (bgFixedLayer) {
+      bgFixedLayer.style.backgroundImage = bgCss;
+    }
+    // Also assign on body as standard fallback without fixed attachment
+    document.body.style.backgroundImage = bgCss;
     try {
       localStorage.setItem(STORAGE_KEY, url);
       if (presetName) localStorage.setItem(PRESET_KEY, presetName);
@@ -76,14 +85,23 @@
     });
   }
 
-  // Restore saved on startup
+  // Restore saved on startup, or default to New York
   try {
     var savedBg = localStorage.getItem(STORAGE_KEY);
     var savedPreset = localStorage.getItem(PRESET_KEY);
-    if (savedBg) {
+    if (savedPreset === "classic") {
+      applyWallpaper(null, "classic");
+    } else if (savedBg) {
       applyWallpaper(savedBg, savedPreset);
+    } else if (savedPreset && PRESETS[savedPreset]) {
+      applyWallpaper(PRESETS[savedPreset], savedPreset);
+    } else {
+      // Default wallpaper for everyone: New York City
+      applyWallpaper(PRESETS[DEFAULT_PRESET], DEFAULT_PRESET);
     }
-  } catch (e) {}
+  } catch (e) {
+    applyWallpaper(PRESETS[DEFAULT_PRESET], DEFAULT_PRESET);
+  }
 
   // Open / close dialog
   function openBgDialog() {
@@ -91,9 +109,13 @@
     var currentPreset = null;
     try {
       currentPreset = localStorage.getItem(PRESET_KEY);
-      if (!currentPreset && !localStorage.getItem(STORAGE_KEY)) currentPreset = "default";
+      if (currentPreset === "classic") {
+        currentPreset = "default";
+      } else if (!currentPreset && !localStorage.getItem(STORAGE_KEY)) {
+        currentPreset = DEFAULT_PRESET;
+      }
     } catch (e) {
-      currentPreset = "default";
+      currentPreset = DEFAULT_PRESET;
     }
     updateActiveCard(currentPreset || "custom");
 
@@ -157,7 +179,7 @@
       if (!card) return;
       var bgKey = card.getAttribute("data-bg");
       if (bgKey === "default") {
-        applyWallpaper(null);
+        applyWallpaper(null, "classic");
       } else if (PRESETS[bgKey]) {
         applyWallpaper(PRESETS[bgKey], bgKey);
       }
@@ -205,10 +227,10 @@
     });
   }
 
-  // Reset to default
+  // Reset to classic (no wallpaper)
   if (customBgResetBtn) {
     customBgResetBtn.addEventListener("click", function () {
-      applyWallpaper(null);
+      applyWallpaper(null, "classic");
     });
   }
 })();

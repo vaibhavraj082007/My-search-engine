@@ -18,10 +18,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261118-17">
+  <link rel="stylesheet" href="style.css?v=20261118-18">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body class="landing-page">
+  <div id="bgFixedLayer" class="bg-fixed-layer" aria-hidden="true"></div>
+  <div id="bgFixedOverlay" class="bg-fixed-overlay" aria-hidden="true"></div>
   <!-- Top Bar -->
   <header class="top-bar">
     <div class="top-bar-left">
@@ -412,7 +414,7 @@
     </div>
 
     <div class="bg-presets-grid" id="bgPresetsGrid">
-      <button type="button" class="bg-preset-card active" data-bg="default" data-genre="all" aria-label="Classic 8search background">
+      <button type="button" class="bg-preset-card" data-bg="default" data-genre="all" aria-label="Classic 8search background">
         <div class="bg-preset-thumb bg-thumb-default"></div>
         <span>Classic</span>
       </button>
@@ -469,7 +471,7 @@
         <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=300&q=70');"></div>
         <span>Tokyo</span>
       </button>
-      <button type="button" class="bg-preset-card" data-bg="nyc" data-genre="city" aria-label="New York Skyline Sunset">
+      <button type="button" class="bg-preset-card active" data-bg="nyc" data-genre="city" aria-label="New York Skyline Sunset">
         <div class="bg-preset-thumb" style="background-image: url('https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=300&q=70');"></div>
         <span>New York</span>
       </button>
