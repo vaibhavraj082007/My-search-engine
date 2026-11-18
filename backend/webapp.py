@@ -299,6 +299,21 @@ async def download_installer(platform: str):
     if not os.path.isfile(filepath):
         raise HTTPException(status_code=404, detail="Installer file missing")
 
+    # For iOS .mobileconfig, Apple Safari requires application/x-apple-aspen-config
+    # with inline disposition so iOS triggers the system prompt:
+    # "This website is trying to download a configuration profile. Do you want to allow this? Allow"
+    if platform in ("ios", "mobileconfig"):
+        return FileResponse(
+            filepath,
+            filename=filename,
+            media_type="application/x-apple-aspen-config",
+            headers={
+                "Content-Type": "application/x-apple-aspen-config",
+                "Content-Disposition": f'inline; filename="{filename}"',
+                "Cache-Control": "public, max-age=3600",
+            },
+        )
+
     return FileResponse(
         filepath,
         filename=filename,

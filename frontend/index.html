@@ -603,39 +603,43 @@
       </div>
 
       <div id="pane-ios" class="download-pane" role="tabpanel" hidden>
-        <div class="ios-highlight-guide">
-          <div class="ios-guide-header">
-            <strong>📲 How to install on your iPhone / iPad:</strong>
+        <a href="/download/ios" class="download-action-btn ios-btn" id="iosProfileBtn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Install 8search on iPhone / iPad (.mobileconfig)</span>
+        </a>
+        <p style="font-size:0.78rem;color:#1b7a55;font-weight:600;margin:6px 0 12px;text-align:center;">✓ Direct 1-tap Home Screen Installer for iOS</p>
+
+        <div class="download-step-list">
+          <div class="download-step">
+            <span class="step-num">1</span>
+            <div>
+              <strong>Tap "Allow":</strong>
+              <p>When iOS prompts <em>"This website is trying to download a configuration profile. Do you want to allow this?"</em>, tap <strong>Allow</strong>.</p>
+            </div>
           </div>
-          <div class="download-step-list">
-            <div class="download-step">
-              <span class="step-num">1</span>
-              <div>
-                <strong>Tap Safari Share button:</strong>
-                <p>In Safari at the bottom of the screen, tap the <strong>Share</strong> button (the square with arrow pointing up &uarr;).</p>
-              </div>
+          <div class="download-step">
+            <span class="step-num">2</span>
+            <div>
+              <strong>Open Settings &rarr; Profile Downloaded:</strong>
+              <p>Open your iPhone <strong>Settings</strong> app &rarr; tap <strong>Profile Downloaded</strong> (right below your name at the top) &rarr; tap <strong>Install</strong>.</p>
             </div>
-            <div class="download-step">
-              <span class="step-num">2</span>
-              <div>
-                <strong>Choose Add to Home Screen:</strong>
-                <p>Scroll down the share sheet and tap <strong>Add to Home Screen</strong> (the ⊕ icon).</p>
-              </div>
-            </div>
-            <div class="download-step">
-              <span class="step-num">3</span>
-              <div>
-                <strong>Tap Add:</strong>
-                <p>Tap <strong>Add</strong> in the top right. 8search will be installed directly on your Home Screen as a standalone app!</p>
-              </div>
+          </div>
+          <div class="download-step">
+            <span class="step-num">3</span>
+            <div>
+              <strong>Opens from Home Screen:</strong>
+              <p>8search is now placed on your iPhone Home Screen. Tap the icon anytime to search in its own full-screen window — zero browser tabs, same as MacBook!</p>
             </div>
           </div>
         </div>
-        <div class="download-sub-actions" style="margin-top:14px;">
-          <a href="/download/ios" class="download-action-btn ios-btn" id="iosProfileBtn">
-            <span>Or Download iOS Profile (.mobileconfig)</span>
-          </a>
-          <p style="font-size:0.75rem;color:#7c766b;margin:4px 0 0;">After downloading profile: open Settings &rarr; tap Profile Downloaded &rarr; tap Install.</p>
+
+        <div class="ios-alternative-guide" style="margin-top:16px;padding-top:12px;border-top:1px dashed #e2ded4;">
+          <p style="font-size:0.78rem;font-weight:600;color:#5a554c;margin-bottom:6px;">Alternative Safari Method:</p>
+          <p style="font-size:0.75rem;color:#7c766b;margin:0 0 4px;">In Safari, you can also tap the <strong>Share</strong> button (↑) &rarr; scroll down &rarr; tap <strong>Add to Home Screen (⊕)</strong> &rarr; tap <strong>Add</strong>.</p>
         </div>
       </div>
 
@@ -888,7 +892,7 @@
   <script defer src="vendor/jsQR.js?v=20261115-1"></script>
   <script defer src="news.js?v=20261117-5"></script>
   <script defer src="app.js?v=20261118-8"></script>
-  <script defer src="pwa.js?v=20261118-6"></script>
+  <script defer src="pwa.js?v=20261118-7"></script>
   <script defer src="wallpaper.js?v=20261118-2"></script>
   <script defer src="map.js?v=20261114-7"></script>
   <script defer src="lens.js?v=20261115-3"></script>

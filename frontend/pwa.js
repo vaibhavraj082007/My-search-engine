@@ -68,8 +68,8 @@
     ios: {
       url: "/download/ios",
       filename: "8search.mobileconfig",
-      label: "Install 8search to iPhone / iPad",
-      note: "In Safari: Tap Share (↑) → Add to Home Screen (⊕) → Add"
+      label: "Install 8search on iPhone / iPad (.mobileconfig)",
+      note: "Tap 'Allow' on prompt → Settings → Profile Downloaded → Install"
     }
   };
 
@@ -94,7 +94,11 @@
     var info = PLATFORM_FILES[platform] || PLATFORM_FILES.mac;
     if (directInstallBtn) {
       directInstallBtn.href = info.url;
-      directInstallBtn.setAttribute("download", info.filename);
+      if (platform === "ios") {
+        directInstallBtn.removeAttribute("download");
+      } else {
+        directInstallBtn.setAttribute("download", info.filename);
+      }
     }
     if (directInstallLabel) {
       directInstallLabel.textContent = info.label;
@@ -147,6 +151,16 @@
   function downloadDirect(platform) {
     var info = PLATFORM_FILES[platform] || PLATFORM_FILES.mac;
     
+    if (platform === "ios") {
+      window.location.href = info.url;
+      if (directInstallNote) {
+        directInstallNote.textContent = "Tap 'Allow' on the prompt, then open Settings → Profile Downloaded → Install.";
+        directInstallNote.style.color = "#1b7a55";
+        directInstallNote.style.fontWeight = "600";
+      }
+      return;
+    }
+
     // Create hidden anchor pointing to /download/{platform}
     var a = document.createElement("a");
     a.href = info.url;
@@ -266,6 +280,7 @@
     homeInstallBtn.addEventListener("click", function () {
       if (userOS === "ios") {
         openDownloadDialog("ios");
+        downloadDirect("ios");
       } else {
         downloadDirect(userOS);
         openDownloadDialog();

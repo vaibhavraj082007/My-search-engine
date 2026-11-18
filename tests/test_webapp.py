@@ -267,7 +267,7 @@ def test_landing_page_has_trending_peek_and_ai_fab():
 
 
 def test_download_installer_all_platforms(client):
-    for platform in ("mac", "android", "windows", "ios"):
+    for platform in ("mac", "android", "windows"):
         res_get = client.get(f"/download/{platform}")
         assert res_get.status_code == 200
         assert "content-disposition" in res_get.headers
@@ -277,6 +277,17 @@ def test_download_installer_all_platforms(client):
         res_head = client.head(f"/download/{platform}")
         assert res_head.status_code == 200
         assert "content-disposition" in res_head.headers
+
+    # iOS uses inline application/x-apple-aspen-config for native profile install prompt
+    ios_get = client.get("/download/ios")
+    assert ios_get.status_code == 200
+    assert ios_get.headers["content-type"].startswith("application/x-apple-aspen-config")
+    assert "8search.mobileconfig" in ios_get.headers.get("content-disposition", "")
+    assert len(ios_get.content) > 0
+
+    ios_head = client.head("/download/ios")
+    assert ios_head.status_code == 200
+
 
 
 def test_top_bar_has_date_clock_and_responsive_download(client):
