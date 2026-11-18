@@ -49,6 +49,7 @@
   var bgFixedLayer = document.getElementById("bgFixedLayer");
 
   function applyWallpaper(url, presetName) {
+    if (!bgFixedLayer) bgFixedLayer = document.getElementById("bgFixedLayer");
     if (!url) {
       document.body.classList.remove("has-custom-bg");
       document.body.style.backgroundImage = "";
@@ -65,9 +66,10 @@
     var bgCss = "url('" + url.replace(/'/g, "\\'") + "')";
     if (bgFixedLayer) {
       bgFixedLayer.style.backgroundImage = bgCss;
+      document.body.style.backgroundImage = "";
+    } else {
+      document.body.style.backgroundImage = bgCss;
     }
-    // Also assign on body as standard fallback without fixed attachment
-    document.body.style.backgroundImage = bgCss;
     try {
       localStorage.setItem(STORAGE_KEY, url);
       if (presetName) localStorage.setItem(PRESET_KEY, presetName);

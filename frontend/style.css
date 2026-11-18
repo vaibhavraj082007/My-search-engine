@@ -6492,6 +6492,7 @@ body.lens-open {
   background-size: cover;
   background-position: center center;
   background-repeat: no-repeat;
+  background-color: #1a1c20;
   z-index: -2;
   pointer-events: none;
   opacity: 0;
@@ -6531,9 +6532,8 @@ body.has-custom-bg.searching .bg-fixed-overlay {
 
 /* ── When a wallpaper is active ──────────────────────────────── */
 body.has-custom-bg {
-  background-size: cover !important;
-  background-position: center center !important;
-  background-repeat: no-repeat !important;
+  background-color: transparent !important;
+  background-image: none !important;
 }
 
 body.has-custom-bg .top-bar,
@@ -6816,6 +6816,51 @@ body.has-custom-bg .page-btn[aria-current="page"] {
   color: #ffffff !important;
 }
 
+body.has-custom-bg .answer-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-left: 4px solid #ea580c;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+}
+
+body.has-custom-bg .answer-title {
+  color: #151412 !important;
+}
+
+body.has-custom-bg .answer-text {
+  color: #2b2823 !important;
+}
+
+body.has-custom-bg .wiki-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+}
+
+body.has-custom-bg .wiki-title {
+  color: #0b6941 !important;
+}
+
+body.has-custom-bg .wiki-extract {
+  color: #2b2823 !important;
+}
+
+body.has-custom-bg .no-results {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 14px;
+  padding: 24px;
+  color: #1e1d1a;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 /* Dark Mode Search Results Contrast Over Wallpaper */
 @media (prefers-color-scheme: dark) {
   body.has-custom-bg .results-section {
@@ -6924,6 +6969,44 @@ body.has-custom-bg .page-btn[aria-current="page"] {
     background: #4ade80 !important;
     border-color: #4ade80 !important;
     color: #0f1712 !important;
+  }
+
+  body.has-custom-bg .answer-card {
+    background: rgba(34, 32, 29, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: 4px solid #f97316;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    border-radius: 14px;
+  }
+
+  body.has-custom-bg .answer-title {
+    color: #ffffff !important;
+  }
+
+  body.has-custom-bg .answer-text {
+    color: #ece8df !important;
+  }
+
+  body.has-custom-bg .wiki-card {
+    background: rgba(34, 32, 29, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    border-radius: 14px;
+  }
+
+  body.has-custom-bg .wiki-title {
+    color: #4ade80 !important;
+  }
+
+  body.has-custom-bg .wiki-extract {
+    color: #ece8df !important;
+  }
+
+  body.has-custom-bg .no-results {
+    background: rgba(34, 32, 29, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    color: #ece8df;
   }
 }
 
