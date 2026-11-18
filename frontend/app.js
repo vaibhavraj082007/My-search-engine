@@ -95,14 +95,23 @@
     var now = new Date();
     if (istClock) {
       try {
-        var timeStr = now.toLocaleTimeString('en-US', {
+        var timeFormatter = new Intl.DateTimeFormat('en-US', {
           timeZone: 'Asia/Kolkata',
-          hour: '2-digit',
+          hour: 'numeric',
           minute: '2-digit',
           second: '2-digit',
           hour12: true
         });
-        istClock.textContent = timeStr + ' IST';
+        var parts = timeFormatter.formatToParts(now);
+        var p = {};
+        for (var i = 0; i < parts.length; i++) {
+          p[parts[i].type] = parts[i].value;
+        }
+        var hour = p.hour || '12';
+        var minute = p.minute || '00';
+        var second = p.second || '00';
+        var dayPeriod = (p.dayPeriod || 'PM').toUpperCase();
+        istClock.innerHTML = '<span class="clock-hm">' + hour + ':' + minute + '</span><span class="clock-sec">:' + second + '</span> <span class="clock-ampm">' + dayPeriod + '</span><span class="clock-zone"> IST</span>';
       } catch (e) {
         var istOffset = 5.5 * 60 * 60 * 1000;
         var istDate = new Date(now.getTime() + istOffset);
@@ -110,29 +119,41 @@
         var ampm = h >= 12 ? 'PM' : 'AM';
         h = h % 12;
         if (h === 0) h = 12;
-        var hh = String(h).padStart(2, '0');
+        var hh = String(h);
         var mm = String(istDate.getUTCMinutes()).padStart(2, '0');
         var ss = String(istDate.getUTCSeconds()).padStart(2, '0');
-        istClock.textContent = hh + ':' + mm + ':' + ss + ' ' + ampm + ' IST';
+        istClock.innerHTML = '<span class="clock-hm">' + hh + ':' + mm + '</span><span class="clock-sec">:' + ss + '</span> <span class="clock-ampm">' + ampm + '</span><span class="clock-zone"> IST</span>';
       }
     }
 
     if (topDate) {
       try {
-        var dateStr = now.toLocaleDateString('en-GB', {
+        var dateFormatter = new Intl.DateTimeFormat('en-GB', {
           timeZone: 'Asia/Kolkata',
           weekday: 'short',
           day: 'numeric',
           month: 'short',
           year: 'numeric'
         });
-        topDate.textContent = dateStr;
+        var dparts = dateFormatter.formatToParts(now);
+        var dp = {};
+        for (var j = 0; j < dparts.length; j++) {
+          dp[dparts[j].type] = dparts[j].value;
+        }
+        var weekday = dp.weekday ? dp.weekday + ', ' : '';
+        var day = dp.day || '1';
+        var month = dp.month || 'Jan';
+        var year = dp.year ? ' ' + dp.year : '';
+        topDate.innerHTML = '<span class="date-day">' + weekday + '</span><span class="date-main">' + day + ' ' + month + '</span><span class="date-year">' + year + '</span>';
       } catch (e) {
         var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         var istOffset2 = 5.5 * 60 * 60 * 1000;
         var istDate2 = new Date(now.getTime() + istOffset2);
-        topDate.textContent = days[istDate2.getUTCDay()] + ', ' + istDate2.getUTCDate() + ' ' + months[istDate2.getUTCMonth()] + ' ' + istDate2.getUTCFullYear();
+        var w = days[istDate2.getUTCDay()] + ', ';
+        var d = istDate2.getUTCDate() + ' ' + months[istDate2.getUTCMonth()];
+        var y = ' ' + istDate2.getUTCFullYear();
+        topDate.innerHTML = '<span class="date-day">' + w + '</span><span class="date-main">' + d + '</span><span class="date-year">' + y + '</span>';
       }
     }
   }
