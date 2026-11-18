@@ -36,10 +36,10 @@ _forgot_last_request: dict[str, float] = {}
 # ── Database helpers ────────────────────────────────────────────────────────
 
 def _get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=FULL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
@@ -49,33 +49,36 @@ def init_db() -> None:
     """Create users, sessions & password-reset tables if they don't exist."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = _get_db()
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            email         TEXT    UNIQUE NOT NULL,
-            password_hash TEXT    NOT NULL,
-            created_at    TEXT    NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS sessions (
-            token      TEXT    PRIMARY KEY,
-            user_id    INTEGER NOT NULL,
-            created_at TEXT    NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS password_resets (
-            token_hash TEXT    PRIMARY KEY,
-            user_id    INTEGER NOT NULL,
-            created_at TEXT    NOT NULL,
-            expires_at TEXT    NOT NULL,
-            used_at    TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_password_resets_user
-            ON password_resets(user_id);
-        """
-    )
-    conn.close()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                email         TEXT    UNIQUE NOT NULL,
+                password_hash TEXT    NOT NULL,
+                created_at    TEXT    NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sessions (
+                token      TEXT    PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                created_at TEXT    NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS password_resets (
+                token_hash TEXT    PRIMARY KEY,
+                user_id    INTEGER NOT NULL,
+                created_at TEXT    NOT NULL,
+                expires_at TEXT    NOT NULL,
+                used_at    TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_password_resets_user
+                ON password_resets(user_id);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Validation helpers ──────────────────────────────────────────────────────
@@ -155,17 +158,19 @@ def get_current_user(session_token: str | None = Cookie(default=None)) -> str | 
     if not session_token:
         return None
     conn = _get_db()
-    row = conn.execute(
-        """
-        SELECT u.email
-          FROM sessions s
-          JOIN users u ON u.id = s.user_id
-         WHERE s.token = ?
-        """,
-        (session_token,),
-    ).fetchone()
-    conn.close()
-    return row["email"] if row else None
+    try:
+        row = conn.execute(
+            """
+            SELECT u.email
+              FROM sessions s
+              JOIN users u ON u.id = s.user_id
+             WHERE s.token = ?
+            """,
+            (session_token,),
+        ).fetchone()
+        return row["email"] if row else None
+    finally:
+        conn.close()
 
 
 def require_user(user: str | None = Depends(get_current_user)) -> str:
@@ -213,9 +218,9 @@ def signup(
         )
         conn.commit()
     except sqlite3.IntegrityError:
-        conn.close()
         raise HTTPException(status_code=409, detail="An account with this email already exists")
-    conn.close()
+    finally:
+        conn.close()
 
     # Send the welcome note after the response; delivery failures never block
     # account creation.
@@ -241,21 +246,22 @@ def login(
     password = body.password
 
     conn = _get_db()
-    row = conn.execute(
-        "SELECT id, password_hash FROM users WHERE email = ?", (email,)
-    ).fetchone()
-    if row is None or not _verify_password(password, row["password_hash"]):
-        conn.close()
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    try:
+        row = conn.execute(
+            "SELECT id, password_hash FROM users WHERE email = ?", (email,)
+        ).fetchone()
+        if row is None or not _verify_password(password, row["password_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    token = secrets.token_hex(32)
-    now = _now().isoformat()
-    conn.execute(
-        "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
-        (token, row["id"], now),
-    )
-    conn.commit()
-    conn.close()
+        token = secrets.token_hex(32)
+        now = _now().isoformat()
+        conn.execute(
+            "INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)",
+            (token, row["id"], now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
     response.set_cookie(
         key="session_token",
@@ -290,20 +296,22 @@ def logout(
     email = None
     if session_token:
         conn = _get_db()
-        row = conn.execute(
-            """
-            SELECT u.email
-            FROM sessions s
-            JOIN users u ON u.id = s.user_id
-            WHERE s.token = ?
-            """,
-            (session_token,),
-        ).fetchone()
-        if row is not None:
-            email = row["email"]
-        conn.execute("DELETE FROM sessions WHERE token = ?", (session_token,))
-        conn.commit()
-        conn.close()
+        try:
+            row = conn.execute(
+                """
+                SELECT u.email
+                FROM sessions s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.token = ?
+                """,
+                (session_token,),
+            ).fetchone()
+            if row is not None:
+                email = row["email"]
+            conn.execute("DELETE FROM sessions WHERE token = ?", (session_token,))
+            conn.commit()
+        finally:
+            conn.close()
 
     response.delete_cookie(key="session_token", path="/")
 
@@ -352,32 +360,40 @@ def forgot_password(body: ForgotPasswordRequest, background: BackgroundTasks):
     if last_request is not None and now_mono - last_request < FORGOT_COOLDOWN_SECONDS:
         return generic
 
+    # Prevent unbound memory growth in long-running processes
+    if len(_forgot_last_request) > 5000:
+        cutoff = now_mono - FORGOT_COOLDOWN_SECONDS
+        for k, v in list(_forgot_last_request.items()):
+            if v < cutoff:
+                _forgot_last_request.pop(k, None)
+
     conn = _get_db()
-    row = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-    if row is None:
+    try:
+        row = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if row is None:
+            return generic
+
+        _forgot_last_request[email] = now_mono
+
+        token = secrets.token_urlsafe(32)
+        now = _now()
+        expires = now + timedelta(minutes=RESET_TOKEN_TTL_MINUTES)
+
+        # Invalidate previous reset links for this account and clear expired ones.
+        conn.execute(
+            "DELETE FROM password_resets WHERE user_id = ? OR expires_at < ?",
+            (row["id"], now.isoformat()),
+        )
+        conn.execute(
+            """
+            INSERT INTO password_resets (token_hash, user_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (_hash_reset_token(token), row["id"], now.isoformat(), expires.isoformat()),
+        )
+        conn.commit()
+    finally:
         conn.close()
-        return generic
-
-    _forgot_last_request[email] = now_mono
-
-    token = secrets.token_urlsafe(32)
-    now = _now()
-    expires = now + timedelta(minutes=RESET_TOKEN_TTL_MINUTES)
-
-    # Invalidate previous reset links for this account and clear expired ones.
-    conn.execute(
-        "DELETE FROM password_resets WHERE user_id = ? OR expires_at < ?",
-        (row["id"], now.isoformat()),
-    )
-    conn.execute(
-        """
-        INSERT INTO password_resets (token_hash, user_id, created_at, expires_at)
-        VALUES (?, ?, ?, ?)
-        """,
-        (_hash_reset_token(token), row["id"], now.isoformat(), expires.isoformat()),
-    )
-    conn.commit()
-    conn.close()
 
     reset_url = f"{emailer.app_base_url()}/reset-password.html?token={token}"
     background.add_task(
@@ -405,41 +421,41 @@ def reset_password(body: ResetPasswordRequest):
 
     token_hash = _hash_reset_token(token)
     conn = _get_db()
-    row = conn.execute(
-        """
-        SELECT pr.user_id, pr.expires_at, u.email
-          FROM password_resets pr
-          JOIN users u ON u.id = pr.user_id
-         WHERE pr.token_hash = ? AND pr.used_at IS NULL
-        """,
-        (token_hash,),
-    ).fetchone()
-
-    if row is None:
-        conn.close()
-        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired")
-
     try:
-        expired = datetime.fromisoformat(row["expires_at"]) <= _now()
-    except ValueError:
-        expired = True
+        row = conn.execute(
+            """
+            SELECT pr.user_id, pr.expires_at, u.email
+              FROM password_resets pr
+              JOIN users u ON u.id = pr.user_id
+             WHERE pr.token_hash = ? AND pr.used_at IS NULL
+            """,
+            (token_hash,),
+        ).fetchone()
 
-    if expired:
-        conn.execute("DELETE FROM password_resets WHERE token_hash = ?", (token_hash,))
+        if row is None:
+            raise HTTPException(status_code=400, detail="This reset link is invalid or has expired")
+
+        try:
+            expired = datetime.fromisoformat(row["expires_at"]) <= _now()
+        except ValueError:
+            expired = True
+
+        if expired:
+            conn.execute("DELETE FROM password_resets WHERE token_hash = ?", (token_hash,))
+            conn.commit()
+            raise HTTPException(status_code=400, detail="This reset link is invalid or has expired")
+
+        password_hash = _hash_password(body.new_password)
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (password_hash, row["user_id"]),
+        )
+        # A reset link is single-use; also sign the user out everywhere.
+        conn.execute("DELETE FROM password_resets WHERE user_id = ?", (row["user_id"],))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))
         conn.commit()
+    finally:
         conn.close()
-        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired")
-
-    password_hash = _hash_password(body.new_password)
-    conn.execute(
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-        (password_hash, row["user_id"]),
-    )
-    # A reset link is single-use; also sign the user out everywhere.
-    conn.execute("DELETE FROM password_resets WHERE user_id = ?", (row["user_id"],))
-    conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))
-    conn.commit()
-    conn.close()
 
     return {
         "message": "Password updated. You can now sign in with your new password.",

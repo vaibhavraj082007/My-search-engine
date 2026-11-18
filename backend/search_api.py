@@ -11,6 +11,7 @@ import asyncio
 import html
 import os
 import re
+import threading
 import traceback
 import uuid
 import xml.etree.ElementTree as ET
@@ -122,8 +123,30 @@ IMAGE_CACHE_TTL = int(os.getenv("IMAGE_CACHE_TTL", "900"))
 UPSTREAM_MIN_RESULTS = max(1, int(os.getenv("UPSTREAM_MIN_RESULTS", "5")))
 DISABLE_LOCAL_INDEX = os.getenv("DISABLE_LOCAL_INDEX", "0") == "1"
 
-_search_semaphore = asyncio.Semaphore(SEARCH_CONCURRENCY)
-_ddgs_semaphore = asyncio.Semaphore(DDGS_CONCURRENCY)
+_search_semaphores: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
+_ddgs_semaphores: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
+_sem_lock = threading.Lock()
+
+
+def _get_search_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    with _sem_lock:
+        sem = _search_semaphores.get(loop)
+        if sem is None:
+            sem = asyncio.Semaphore(SEARCH_CONCURRENCY)
+            _search_semaphores[loop] = sem
+        return sem
+
+
+def _get_ddgs_semaphore() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    with _sem_lock:
+        sem = _ddgs_semaphores.get(loop)
+        if sem is None:
+            sem = asyncio.Semaphore(DDGS_CONCURRENCY)
+            _ddgs_semaphores[loop] = sem
+        return sem
+
 
 _HTML_HEADERS = {
     "User-Agent": (
@@ -152,7 +175,7 @@ async def _run_ddgs(fn, *args, timeout: float | None = None):
     every search wait on the slowest scrape.
     """
     try:
-        async with _ddgs_semaphore:
+        async with _get_ddgs_semaphore():
             return await asyncio.wait_for(
                 asyncio.to_thread(fn, *args), timeout or DDGS_TIMEOUT
             )
@@ -887,8 +910,9 @@ async def _collect_payload(query: str, page: int) -> dict:
 
 
 async def _collect_payload_limited(query: str, page: int) -> dict:
+    sem = _get_search_semaphore()
     try:
-        await asyncio.wait_for(_search_semaphore.acquire(), timeout=SEARCH_QUEUE_TIMEOUT)
+        await asyncio.wait_for(sem.acquire(), timeout=SEARCH_QUEUE_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(
             status_code=503,
@@ -897,7 +921,7 @@ async def _collect_payload_limited(query: str, page: int) -> dict:
     try:
         return await _collect_payload(query, page)
     finally:
-        _search_semaphore.release()
+        sem.release()
 
 
 def _has_content(payload: dict) -> bool:

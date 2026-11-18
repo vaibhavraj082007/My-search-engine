@@ -43,29 +43,32 @@ _recent: dict[str, float] = {}
 
 def _get_db() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=FULL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
 
 def init_db() -> None:
     conn = _get_db()
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS query_stats (
-            query_norm TEXT PRIMARY KEY,
-            query_text TEXT NOT NULL,
-            count      INTEGER NOT NULL DEFAULT 0,
-            last_seen  TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS query_stats_count
-            ON query_stats(count DESC);
-        """
-    )
-    conn.close()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS query_stats (
+                query_norm TEXT PRIMARY KEY,
+                query_text TEXT NOT NULL,
+                count      INTEGER NOT NULL DEFAULT 0,
+                last_seen  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS query_stats_count
+                ON query_stats(count DESC);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def clean_query(value: str | None) -> str:
@@ -113,6 +116,7 @@ def record_query(value: str) -> None:
         for key, stamp in list(_recent.items()):
             if stamp < cutoff:
                 _recent.pop(key, None)
+    conn = None
     try:
         conn = _get_db()
         conn.execute(
@@ -127,11 +131,13 @@ def record_query(value: str) -> None:
             (norm, text),
         )
         conn.commit()
-        conn.close()
     except Exception:
         # Suggestions are an enhancement; a locked database must never break
         # a search.
         return
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 def _escape_like(value: str) -> str:
@@ -141,6 +147,7 @@ def _escape_like(value: str) -> str:
 def popular_suggestions(value: str, limit: int) -> list[dict]:
     prefix = _escape_like(_norm(value)) + "%"
     contains = "%" + _escape_like(_norm(value)) + "%"
+    conn = None
     try:
         conn = _get_db()
         rows = conn.execute(
@@ -171,20 +178,24 @@ def popular_suggestions(value: str, limit: int) -> list[dict]:
                     seen.add(row["query_text"].casefold())
                 if len(rows) >= limit:
                     break
-        conn.close()
     except Exception:
         return []
+    finally:
+        if conn is not None:
+            conn.close()
     return [{"text": row["query_text"], "kind": "popular"} for row in rows[:limit]]
 
 
 def local_index_suggestions(value: str, limit: int) -> list[dict]:
     """Prefix matches from the optional local full-text index."""
     prefix = _escape_like(_norm(value)) + "%"
+    conn = None
     try:
         if not os.path.exists(searchdb.DB_PATH):
             return []
-        conn = sqlite3.connect(searchdb.DB_PATH, timeout=2)
+        conn = sqlite3.connect(searchdb.DB_PATH, timeout=5)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=5000")
         rows = conn.execute(
             """
             SELECT title FROM pages
@@ -195,9 +206,11 @@ def local_index_suggestions(value: str, limit: int) -> list[dict]:
             """,
             (prefix, max(limit * 3, 20)),
         ).fetchall()
-        conn.close()
     except Exception:
         return []
+    finally:
+        if conn is not None:
+            conn.close()
 
     out: list[dict] = []
     seen: set[str] = set()

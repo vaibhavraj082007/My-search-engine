@@ -17,6 +17,7 @@ import html
 import json
 import os
 import re
+import threading
 import traceback
 from urllib.parse import quote
 
@@ -48,8 +49,19 @@ _YT_DATA = (
 )
 
 _client: httpx.AsyncClient | None = None
-_client_lock = asyncio.Lock()
-_ddgs_video_limiter = asyncio.Semaphore(DDGS_VIDEO_CONCURRENCY)
+_client_lock = threading.Lock()
+_ddgs_video_limiters: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
+_ddgs_limiter_lock = threading.Lock()
+
+
+def _get_ddgs_video_limiter() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    with _ddgs_limiter_lock:
+        sem = _ddgs_video_limiters.get(loop)
+        if sem is None:
+            sem = asyncio.Semaphore(DDGS_VIDEO_CONCURRENCY)
+            _ddgs_video_limiters[loop] = sem
+        return sem
 
 
 async def get_http_client() -> httpx.AsyncClient:
@@ -57,7 +69,7 @@ async def get_http_client() -> httpx.AsyncClient:
     global _client
     if _client is not None and not _client.is_closed:
         return _client
-    async with _client_lock:
+    with _client_lock:
         if _client is None or _client.is_closed:
             _client = httpx.AsyncClient(
                 timeout=httpx.Timeout(HTTP_TIMEOUT_SECONDS),
@@ -396,7 +408,7 @@ async def get_videos(query: str, max_results: int = 4) -> list[dict]:
 
     # Bound the blocking fallback so unique-query bursts cannot exhaust threads.
     try:
-        async with _ddgs_video_limiter:
+        async with _get_ddgs_video_limiter():
             return await asyncio.wait_for(
                 asyncio.to_thread(_ddgs_videos_sync, query, max_results),
                 timeout=DDGS_VIDEO_TIMEOUT,

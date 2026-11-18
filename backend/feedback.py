@@ -36,10 +36,10 @@ _cooldown_lock = threading.Lock()
 # ── Database helpers ────────────────────────────────────────────────────────
 
 def _get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=FULL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=15000")
     return conn
 
@@ -48,22 +48,25 @@ def init_db() -> None:
     """Create the feedback table if it doesn't exist."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = _get_db()
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS feedback (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            name       TEXT,
-            email      TEXT,
-            message    TEXT NOT NULL,
-            ip         TEXT,
-            user_agent TEXT,
-            created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_feedback_created
-            ON feedback(created_at);
-        """
-    )
-    conn.close()
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT,
+                email      TEXT,
+                message    TEXT NOT NULL,
+                ip         TEXT,
+                user_agent TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_feedback_created
+                ON feedback(created_at);
+            """
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ── Request helpers ─────────────────────────────────────────────────────────
@@ -142,16 +145,18 @@ def submit_feedback(
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     conn = _get_db()
-    cursor = conn.execute(
-        """
-        INSERT INTO feedback (name, email, message, ip, user_agent, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (name or None, email or None, message, ip, user_agent, created_at),
-    )
-    feedback_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO feedback (name, email, message, ip, user_agent, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (name or None, email or None, message, ip, user_agent, created_at),
+        )
+        feedback_id = cursor.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
 
     logger.info("Stored feedback #%s from %s", feedback_id, ip)
 

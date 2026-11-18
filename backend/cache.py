@@ -7,6 +7,7 @@ share cached search payloads across workers and instances.
 import asyncio
 import json
 import os
+import threading
 import time
 from collections import OrderedDict
 from typing import Any, Awaitable, Callable
@@ -29,9 +30,9 @@ class Cache:
         self.ttl = ttl
         self.redis = None
         self._memory: OrderedDict[str, tuple[float, Any]] = OrderedDict()
-        self._memory_lock = asyncio.Lock()
+        self._memory_lock = threading.Lock()
         self._inflight: dict[str, asyncio.Task] = {}
-        self._inflight_lock = asyncio.Lock()
+        self._inflight_lock = threading.Lock()
 
     async def start(self) -> None:
         if not REDIS_URL or redis_async is None:
@@ -65,7 +66,7 @@ class Cache:
             except Exception:
                 pass
 
-        async with self._memory_lock:
+        with self._memory_lock:
             item = self._memory.get(key)
             if item is None:
                 return None
@@ -85,7 +86,7 @@ class Cache:
             except Exception:
                 pass
 
-        async with self._memory_lock:
+        with self._memory_lock:
             self._memory[key] = (time.monotonic() + ttl, value)
             self._memory.move_to_end(key)
             while len(self._memory) > self.max_items:
@@ -111,7 +112,7 @@ class Cache:
                     await self.set(key, value, negative_ttl)
             return value
         finally:
-            async with self._inflight_lock:
+            with self._inflight_lock:
                 if self._inflight.get(key) is asyncio.current_task():
                     self._inflight.pop(key, None)
 
@@ -128,9 +129,11 @@ class Cache:
         if cached is not None:
             return cached, True
 
-        async with self._inflight_lock:
+        current_loop = asyncio.get_running_loop()
+        with self._inflight_lock:
             task = self._inflight.get(key)
-            if task is None:
+            # Only reuse in-flight task if it belongs to the same event loop and is not done
+            if task is None or task.done() or task.get_loop() is not current_loop:
                 task = asyncio.create_task(
                     self._compute(key, factory, ttl, should_cache, negative_ttl)
                 )

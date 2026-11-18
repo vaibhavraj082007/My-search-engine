@@ -56,9 +56,14 @@ def _seed_data_if_empty():
         seed_users_db = os.path.join(seed_dir, "users.db")
         target_users_db = os.path.join(data_dir, "users.db")
         if os.path.isfile(seed_users_db) and os.path.isfile(target_users_db):
+            s_conn = None
+            t_conn = None
             try:
-                s_conn = sqlite3.connect(seed_users_db)
-                t_conn = sqlite3.connect(target_users_db)
+                s_conn = sqlite3.connect(seed_users_db, timeout=15)
+                t_conn = sqlite3.connect(target_users_db, timeout=15)
+                t_conn.execute("PRAGMA journal_mode=WAL")
+                t_conn.execute("PRAGMA synchronous=NORMAL")
+                t_conn.execute("PRAGMA busy_timeout=15000")
                 s_cur = s_conn.cursor()
                 t_cur = t_conn.cursor()
                 s_cur.execute("SELECT email, password_hash, created_at FROM users")
@@ -69,10 +74,13 @@ def _seed_data_if_empty():
                         (email, pwd_hash, created_at),
                     )
                 t_conn.commit()
-                s_conn.close()
-                t_conn.close()
             except Exception:
                 pass
+            finally:
+                if s_conn is not None:
+                    s_conn.close()
+                if t_conn is not None:
+                    t_conn.close()
 
 
 @asynccontextmanager

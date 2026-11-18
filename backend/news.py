@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
@@ -48,7 +49,20 @@ NEWS_RELAX_HOURS = max(NEWS_MAX_AGE_HOURS, 72)
 FEED_TIMEOUT = max(1.0, float(os.getenv("NEWS_FEED_TIMEOUT", "6")))
 MAX_FEED_BYTES = 5 * 1024 * 1024
 
-_refresh_lock = asyncio.Lock()
+_refresh_locks: dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
+_news_lock = threading.Lock()
+
+
+def _get_refresh_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    with _news_lock:
+        lk = _refresh_locks.get(loop)
+        if lk is None:
+            lk = asyncio.Lock()
+            _refresh_locks[loop] = lk
+        return lk
+
+
 _background_tasks: set[asyncio.Task] = set()
 _scheduler_task: asyncio.Task | None = None
 
@@ -485,9 +499,10 @@ def _rank_for_snapshot(items: list[dict], now: datetime, previous: set[str]) -> 
 
 async def refresh_news(force: bool = False) -> dict:
     """Fetch, rank and atomically replace the snapshot. Keep old data on failure."""
-    if _refresh_lock.locked():
+    lock = _get_refresh_lock()
+    if lock.locked():
         return {"status": "skipped", "reason": "refresh already running"}
-    async with _refresh_lock:
+    async with lock:
         lock_handle = _file_lock()
         if lock_handle is None:
             return {"status": "skipped", "reason": "another worker is refreshing"}
@@ -539,7 +554,8 @@ def _track(task: asyncio.Task) -> None:
 
 def ensure_fresh_async() -> None:
     """Stale-while-revalidate: serve the old snapshot while this runs."""
-    if not needs_refresh() or _refresh_lock.locked():
+    lock = _get_refresh_lock()
+    if not needs_refresh() or lock.locked():
         return
     task = asyncio.create_task(refresh_news())
     _track(task)
