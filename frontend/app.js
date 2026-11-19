@@ -194,6 +194,29 @@
   });
 
   // ---------- Auth ----------
+  function warmRecentHistory() {
+    if (!currentUser) return;
+    if (recentHistoryCache.at &&
+        Date.now() - recentHistoryCache.at < 20000) {
+      return;
+    }
+    fetch('/api/history?limit=5', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('history unavailable');
+        return r.json();
+      })
+      .then(function (data) {
+        if (!currentUser) return;
+        recentHistoryCache = {
+          items: data && Array.isArray(data.items) ? data.items : [],
+          at: Date.now()
+        };
+      })
+      .catch(function () {
+        // The search box still works when history is unavailable.
+      });
+  }
+
   function checkAuth() {
     fetch('/api/me', { credentials: 'same-origin' })
       .then(function (r) { if (!r.ok) throw 0; return r.json(); })
@@ -209,9 +232,10 @@
           recordHistory(pendingHistoryRecord.query, pendingHistoryRecord.tab);
           pendingHistoryRecord = null;
         }
-        if (document.activeElement === searchInput && !searchInput.value.trim()) {
-          showRecentHistory();
-        }
+        // Warm the recent-search cache so the first click on the search box
+        // opens instantly. Do not show the panel until the visitor asks for
+        // it; autofocus alone should not cover the page on load.
+        warmRecentHistory();
       })
       .catch(function () {
         currentUser = null;
@@ -427,11 +451,24 @@
       return;
     }
 
+    suggestionsEl.setAttribute(
+      'aria-label',
+      view === 'history'
+        ? 'Recent searches. Only you can see these.'
+        : 'Search suggestions'
+    );
+
     if (view === 'history') {
       var heading = document.createElement('div');
       heading.className = 'suggestion-heading';
       heading.setAttribute('aria-hidden', 'true');
-      heading.textContent = 'Recent searches';
+      var headingLabel = document.createElement('span');
+      headingLabel.textContent = 'Recent searches';
+      var headingPrivacy = document.createElement('span');
+      headingPrivacy.className = 'suggestion-private';
+      headingPrivacy.textContent = 'Only you';
+      heading.appendChild(headingLabel);
+      heading.appendChild(headingPrivacy);
       suggestionsEl.appendChild(heading);
     }
 
@@ -463,7 +500,9 @@
       hint.className = 'suggestion-kind';
       hint.textContent = kind === 'popular' ? 'Popular'
         : (kind === 'local' ? 'On this site'
-        : (kind === 'history' ? 'Recent' : ''));
+        : (kind === 'history'
+          ? (TAB_LABELS[(entry && entry.tab) || 'web'] || TAB_LABELS.web)
+          : ''));
 
       button.appendChild(icon);
       button.appendChild(label);
@@ -2070,6 +2109,18 @@
       historyState.loading = false;
       hideHistoryConfirm();
       historyStatus.textContent = '';
+    });
+    historyDialog.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Dismiss the delete confirmation first, then the whole dialog.
+      if (historyConfirm && !historyConfirm.classList.contains('hidden')) {
+        hideHistoryConfirm();
+        if (historyClear) historyClear.focus();
+        return;
+      }
+      closeHistory();
     });
   }
   if (historyLoadMore) {

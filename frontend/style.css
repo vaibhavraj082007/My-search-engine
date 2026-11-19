@@ -200,6 +200,25 @@ input {
   font-size: 0.8rem;
 }
 
+@media (max-width: 900px) {
+  .top-bar-right,
+  .user-info {
+    min-width: 0;
+  }
+
+  .user-email {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ist-clock .clock-sec,
+  .ist-clock .clock-zone {
+    display: none;
+  }
+}
+
 .logout-btn {
   padding: 5px 12px;
   background: transparent;
@@ -251,6 +270,11 @@ input {
 
 .search-bar {
   position: relative;
+  /* The wallpaper theme gives the search bar and its siblings their own
+     backdrop-filter stacking contexts. Keep this one on top so the open
+     suggestions card can never be painted under the mode tabs, shortcut
+     tiles or the default-engine banner. */
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -5150,44 +5174,180 @@ body.lens-open {
 /* ── Search suggestions dropdown ─────────────────────────────────── */
 .suggestions {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 10px);
   left: 0;
   right: 0;
-  background: var(--bg-card, #1c1c1f);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
   z-index: 100;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  max-height: min(420px, 60vh);
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #fffdfa;
+  color: #24211c;
+  border: 1px solid #e5dfd4;
+  border-radius: 18px;
+  box-shadow: 0 22px 60px rgba(45, 38, 28, 0.22), 0 2px 8px rgba(45, 38, 28, 0.08);
+  color-scheme: light;
 }
+
 .suggestions.hidden {
   display: none;
 }
+
+.suggestion-heading {
+  position: sticky;
+  top: -6px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px 7px;
+  background: #fffdfa;
+  color: #6f685c;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.suggestion-private {
+  padding: 3px 8px;
+  background: #edf5f0;
+  color: #14563d;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
 .suggestion-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
   width: 100%;
-  padding: 10px 16px;
+  padding: 10px 10px;
   background: none;
-  border: none;
-  color: var(--text, #eee);
+  border: 0;
+  border-radius: 11px;
+  color: #24211c;
   font: inherit;
-  font-size: 0.95rem;
+  font-size: 0.93rem;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
+
 .suggestion-item:hover,
 .suggestion-item.active {
-  background: rgba(255, 255, 255, 0.08);
+  background: #edf5f0;
+  color: #14563d;
+  box-shadow: inset 0 0 0 1px rgba(27, 122, 85, 0.12);
 }
+
+.suggestion-item:focus-visible {
+  outline: 2px solid rgba(27, 122, 85, 0.5);
+  outline-offset: -2px;
+}
+
+.suggestion-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-kind {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  color: #6f685c;
+  font-size: 0.69rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-item:hover .suggestion-kind,
+.suggestion-item.active .suggestion-kind {
+  color: #3f6b58;
+}
+
 .suggestion-icon {
-  color: var(--text-muted, #888);
-  display: inline-flex;
-  align-items: center;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: #edf5f0;
+  color: #1b7a55;
+  border-radius: 50%;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.suggestion-icon-popular {
+  background: #f8f1e5;
+  color: #8a5a2b;
+}
+
+.suggestion-icon-local {
+  background: #eef0f4;
+  color: #4b5563;
+}
+
+.suggestion-action {
+  margin-top: 4px;
+  border-top: 1px solid #f0e9dd;
+  border-radius: 0 0 11px 11px;
+  color: #14563d;
+  font-weight: 600;
+}
+
+.suggestion-action .suggestion-icon {
+  background: #1b7a55;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.suggestion-action:hover,
+.suggestion-action.active {
+  background: #edf5f0;
+}
+
+@media (max-width: 520px) {
+  .suggestions {
+    top: calc(100% + 8px);
+    max-height: min(360px, 56vh);
+    border-radius: 15px;
+  }
+
+  .suggestion-heading {
+    padding: 9px 8px 6px;
+  }
+
+  .suggestion-item {
+    gap: 9px;
+    padding: 10px 8px;
+    font-size: 0.9rem;
+  }
+
+  .suggestion-icon {
+    width: 27px;
+    height: 27px;
+    font-size: 0.76rem;
+  }
+
+  .suggestion-kind {
+    font-size: 0.65rem;
+  }
 }
 
 /* ── Default Engine Banner ────────────────────────────────────────── */
@@ -5556,45 +5716,6 @@ body.lens-open {
   font-size: 0.78rem;
 }
 
-/* ── Recent searches inside the suggestions dropdown ──────────── */
-.suggestion-heading {
-  padding: 9px 16px 5px;
-  color: var(--text-muted, #6b7280);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.suggestion-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.suggestion-kind {
-  flex: none;
-  color: var(--text-muted, #6b7280);
-  font-size: 0.7rem;
-}
-
-.suggestion-action {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  color: #9fd4ba;
-  font-weight: 600;
-}
-
-.suggestion-action:hover,
-.suggestion-action.active {
-  background: rgba(57, 125, 99, 0.16);
-}
-
-.suggestion-action .suggestion-icon {
-  color: #9fd4ba;
-}
-
 /* ── Private per-account search history ───────────────────────── */
 .history-dialog {
   color-scheme: light;
@@ -5899,6 +6020,19 @@ body.lens-open {
 
   .history-list {
     max-height: 42vh;
+  }
+
+  .history-item {
+    gap: 10px;
+    padding: 10px 8px;
+  }
+
+  .history-item-query {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .history-footer {
@@ -6668,8 +6802,11 @@ body.has-custom-bg .engine-banner-close {
 }
 
 body.has-custom-bg .site-footer {
+  background: rgba(18, 17, 15, 0.78);
   color: #e5dfd4 !important;
   border-top-color: rgba(255, 255, 255, 0.15) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
 }
 
 body.has-custom-bg .footer-link {

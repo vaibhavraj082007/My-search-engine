@@ -141,6 +141,7 @@ def test_app_shell_files_are_present_and_keep_accounts_out_of_cache():
 def test_history_ui_is_available_from_the_search_bar_and_backed_by_the_api():
     index = (ROOT / "frontend/index.html").read_text(encoding="utf-8")
     app_js = (ROOT / "frontend/app.js").read_text(encoding="utf-8")
+    style = (ROOT / "frontend/style.css").read_text(encoding="utf-8")
 
     assert 'id="historyDialog"' in index
     assert 'id="historyList"' in index
@@ -155,6 +156,16 @@ def test_history_ui_is_available_from_the_search_bar_and_backed_by_the_api():
     assert "function openHistory()" in app_js
     assert "function clearAllHistory()" in app_js
     assert "method: 'DELETE'" in app_js
+
+    # Sign-in warms the recent-search cache; a missing helper here used to
+    # throw and silently downgrade a signed-in visitor to the guest UI.
+    assert "function warmRecentHistory()" in app_js
+    assert "warmRecentHistory();" in app_js
+    assert "Only you" in app_js
+    # The open suggestions card must outrank the backdrop-filter siblings
+    # (mode tabs, shortcuts, default-search banner) on the wallpaper theme.
+    assert "z-index: 30" in style
+    assert ".suggestion-private" in style
 
 
 def test_set_default_page_replaces_placeholders(client):

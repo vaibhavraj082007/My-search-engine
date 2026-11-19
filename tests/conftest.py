@@ -10,13 +10,64 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend import clicks, search_api  # noqa: E402
+from backend import (  # noqa: E402
+    auth,
+    clicks,
+    feedback,
+    history,
+    news,
+    search_api,
+    searchdb,
+    suggestions,
+)
 from backend.cache import cache  # noqa: E402
 
 BROWSER_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
 )
+
+
+@pytest.fixture(autouse=True)
+def isolated_data_dir(tmp_path, monkeypatch):
+    """Keep every test away from the real ``data/`` databases.
+
+    Search requests record suggestions in a background task, sign-in writes
+    sessions and history, and the full-app tests exercise every router.  If a
+    single module keeps pointing at ``data/``, a test run silently pollutes
+    live accounts, history and ranking data.  Redirect every database for
+    every test, then initialize the schemas the app expects.
+    """
+    data_dir = tmp_path / "isolated-data"
+    data_dir.mkdir()
+    for module, filename in (
+        (auth, "users.db"),
+        (clicks, "clicks.db"),
+        (feedback, "feedback.db"),
+        (news, "news.db"),
+        (searchdb, "search.db"),
+        (suggestions, "suggest.db"),
+    ):
+        monkeypatch.setattr(module, "DB_PATH", str(data_dir / filename))
+
+    auth.init_db()
+    history.init_db()
+    feedback.init_db()
+    news.init_db()
+    searchdb.init_db()
+    suggestions.init_db()
+    clicks.reset_runtime_state()
+    clicks.init_db()
+
+    cache._memory.clear()
+    suggestions._cache.clear()
+    suggestions._recent.clear()
+    feedback._last_submission.clear()
+    auth._forgot_last_request.clear()
+
+    yield
+
+    clicks.reset_runtime_state()
 
 
 @pytest.fixture

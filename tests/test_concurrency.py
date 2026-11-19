@@ -6,23 +6,12 @@ verify zero database locks (OperationalError: database is locked) and zero 500s.
 """
 
 import concurrent.futures
-import os
 import uuid
-import pytest
+
 from fastapi.testclient import TestClient
 
-from backend import auth, clicks, feedback, history, main, search_api, suggestions
+from backend import history, search_api, suggestions
 from backend.main import app
-
-
-@pytest.fixture(autouse=True)
-def init_all_databases():
-    """Ensure all databases and tables are initialized and clean."""
-    auth.init_db()
-    history.init_db()
-    feedback.init_db()
-    clicks.init_db()
-    suggestions.init_db()
 
 
 def test_concurrent_signups_and_logins():

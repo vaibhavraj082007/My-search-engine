@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261118-20">
+  <link rel="stylesheet" href="style.css?v=20261118-28">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body class="landing-page">
@@ -39,7 +39,7 @@
       </button>
     </div>
     <div class="top-bar-right">
-      <button type="button" id="homeInstallBtn" class="download-app-btn" aria-label="Download 8search app for your device">
+      <button type="button" id="homeInstallBtn" class="download-app-btn" aria-describedby="homeInstallDesc">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
@@ -47,6 +47,7 @@
         </svg>
         <span class="download-btn-label"><span class="dl-full">Download </span>App</span>
       </button>
+      <span id="homeInstallDesc" class="visually-hidden">Download the 8search app for this device</span>
       <div id="userArea">
         <a href="/login" class="sign-in-link">Sign in</a>
       </div>
@@ -862,7 +863,7 @@
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script defer src="vendor/jsQR.js?v=20261115-1"></script>
   <script defer src="news.js?v=20261117-5"></script>
-  <script defer src="app.js?v=20261118-9"></script>
+  <script defer src="app.js?v=20261118-15"></script>
   <script defer src="pwa.js?v=20261118-9"></script>
   <script defer src="wallpaper.js?v=20261118-3"></script>
   <script defer src="map.js?v=20261114-7"></script>
