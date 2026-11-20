@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/style.css?v=20261118-20">
+  <link rel="stylesheet" href="/style.css?v=20261118-33">
 </head>
 <body class="landing-page legal-page">
   <header class="top-bar">
@@ -71,13 +71,27 @@
       </ol>
     </article>
 
-    <article class="legal-card">
+    <article class="legal-card" id="macos">
       <h2>macOS</h2>
       <ol>
         <li>In <strong>Chrome</strong> or <strong>Edge</strong>, click the install icon in the address bar and choose <strong>Install</strong>.</li>
         <li>In <strong>Safari 17 or later</strong>, open <strong>File</strong> → <strong>Add to Dock</strong>.</li>
         <li>Launch 8search from Launchpad or the Dock. Keep it in the Dock for quick access.</li>
       </ol>
+
+      <div class="mac-launch-note" role="note">
+        <strong>Downloaded the .dmg and macOS blocked it?</strong>
+        <p>
+          That is Apple's standard check for apps from outside the App Store, not a virus.
+          Open <strong>System Settings</strong>, go to <strong>Privacy &amp; Security</strong>,
+          click <strong>Open Anyway</strong>, then confirm. Or run this once in Terminal:
+        </p>
+        <div class="mac-command">
+          <code id="macFixCommand">xattr -dr com.apple.quarantine /Applications/8search.app</code>
+          <button type="button" id="copyMacFixBtn" class="mac-copy-btn" aria-describedby="macFixStatus">Copy</button>
+        </div>
+        <p id="macFixStatus" class="mac-fix-status" aria-live="polite"></p>
+      </div>
     </article>
 
     <article class="legal-card">
@@ -115,6 +129,6 @@
     <p class="footer-note">© 2026 8search</p>
   </footer>
 
-  <script defer src="/pwa.js?v=20261118-1"></script>
+  <script defer src="/pwa.js?v=20261118-10"></script>
 </body>
 </html>

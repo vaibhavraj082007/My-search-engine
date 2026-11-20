@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261118-28">
+  <link rel="stylesheet" href="style.css?v=20261118-33">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body class="landing-page">
@@ -577,7 +577,11 @@
           </svg>
           <span>Download 8search for macOS (.dmg)</span>
         </a>
-        <p style="font-size:0.78rem;color:#1b7a55;font-weight:600;margin:6px 0 12px;text-align:center;">✓ Native Standalone App · Opens in its own window, NOT in Brave or Chrome</p>
+        <p class="download-mac-tagline">✓ Native standalone app · Opens in its own window, not a browser tab</p>
+        <p class="download-first-run">
+          <strong>macOS blocked the first launch?</strong>
+          <a href="/install#macos">See the one-time fix</a>
+        </p>
 
         <div class="download-step-list">
           <div class="download-step">
@@ -590,8 +594,8 @@
           <div class="download-step">
             <span class="step-num">2</span>
             <div>
-              <strong>Drag to Applications:</strong>
-              <p>Drag the <strong>8search</strong> app icon into the <strong>Applications</strong> folder (or double-click <em>Launch 8search</em> inside the DMG).</p>
+              <strong>Run the installer:</strong>
+              <p>Double-click <strong>Install 8search.command</strong> inside the DMG. It copies the app to Applications and opens it. You can also drag <strong>8search</strong> to Applications yourself.</p>
             </div>
           </div>
           <div class="download-step">
@@ -601,6 +605,24 @@
               <p>Open 8search from Applications or your Dock. It opens in its own native app window — completely standalone with zero browser tabs!</p>
             </div>
           </div>
+        </div>
+
+        <div class="mac-launch-note" role="note">
+          <strong>macOS blocked the first launch?</strong>
+          <p>
+            Apple shows that warning for apps distributed outside the App Store. It is not a virus.
+            Open <strong>System Settings</strong>, go to <strong>Privacy &amp; Security</strong>,
+            click <strong>Open Anyway</strong>, then confirm. Or run this once in Terminal:
+          </p>
+          <div class="mac-command">
+            <code id="macFixCommand">xattr -dr com.apple.quarantine /Applications/8search.app</code>
+            <button type="button" id="copyMacFixBtn" class="mac-copy-btn" aria-describedby="macFixStatus">Copy</button>
+          </div>
+          <p id="macFixStatus" class="mac-fix-status" aria-live="polite"></p>
+          <p class="mac-launch-alt">
+            Using Chrome or Edge? You can avoid the warning completely by
+            <a href="/install">installing 8search from the browser</a> instead.
+          </p>
         </div>
       </div>
 
@@ -864,7 +886,7 @@
   <script defer src="vendor/jsQR.js?v=20261115-1"></script>
   <script defer src="news.js?v=20261117-5"></script>
   <script defer src="app.js?v=20261118-15"></script>
-  <script defer src="pwa.js?v=20261118-9"></script>
+  <script defer src="pwa.js?v=20261118-10"></script>
   <script defer src="wallpaper.js?v=20261118-3"></script>
   <script defer src="map.js?v=20261114-7"></script>
   <script defer src="lens.js?v=20261115-3"></script>

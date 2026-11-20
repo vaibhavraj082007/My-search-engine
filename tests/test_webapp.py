@@ -120,9 +120,14 @@ def test_install_page_explains_every_platform(client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     body = response.text
-    for text in ("iPhone", "iPad", "Android", "Windows", "macOS", "Add to Home Screen"):
+    for text in (
+        "iPhone", "iPad", "Android", "Windows", "macOS", "Add to Home Screen",
+        "Privacy &amp; Security", "Open Anyway",
+    ):
         assert text in body
     assert 'id="installAppBtn"' in body
+    assert 'id="macFixCommand"' in body
+    assert 'id="copyMacFixBtn"' in body
     assert "/manifest.webmanifest" in body
     assert "/pwa.js" in body
 
@@ -131,11 +136,14 @@ def test_app_shell_files_are_present_and_keep_accounts_out_of_cache():
     service_worker = (ROOT / "frontend/sw.js").read_text(encoding="utf-8")
     offline = (ROOT / "frontend/offline.html").read_text(encoding="utf-8")
     install = (ROOT / "frontend/install.html").read_text(encoding="utf-8")
+    pwa = (ROOT / "frontend/pwa.js").read_text(encoding="utf-8")
     assert 'url.pathname.startsWith("/api/")' in service_worker
     assert 'request.mode === "navigate"' in service_worker
     assert "offline.html" in service_worker
     assert "You’re offline." in offline
     assert "/install" in install
+    assert "copyMacFixBtn" in pwa
+    assert "xattr -dr com.apple.quarantine" in pwa
 
 
 def test_history_ui_is_available_from_the_search_bar_and_backed_by_the_api():

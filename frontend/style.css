@@ -3542,6 +3542,10 @@ body.signin-open {
   line-height: 1.65;
 }
 
+.legal-card[id] {
+  scroll-margin-top: 92px;
+}
+
 .legal-card {
   padding: clamp(22px, 4vw, 34px);
   background: var(--surface);
@@ -6346,7 +6350,7 @@ body.lens-open {
   margin-top: 1px;
 }
 
-.download-step strong {
+.download-step > div > strong {
   display: block;
   font-size: 0.84rem;
   color: #1d1c19;
@@ -6358,6 +6362,134 @@ body.lens-open {
   font-size: 0.79rem;
   color: #5f5a51;
   line-height: 1.45;
+}
+
+.download-mac-tagline {
+  margin: 6px 0;
+  color: #1b7a55;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.download-first-run {
+  margin: 0 0 12px;
+  color: #6b655b;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.download-first-run strong {
+  color: #4a3d22;
+  font-weight: 650;
+}
+
+.download-first-run a {
+  color: #1b7a55;
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.mac-launch-note {
+  margin-top: 12px;
+  padding: 13px 14px;
+  background: #fffaf0;
+  border: 1px solid #ecd9b4;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.mac-launch-note strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #4a3d22;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.mac-launch-note p {
+  margin: 0;
+  color: #5f5a51;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.mac-command {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 9px 0 4px;
+}
+
+.mac-command code {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background: #ffffff;
+  border: 1px solid #e6dccb;
+  border-radius: 8px;
+  color: #3d3a33;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.71rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.mac-copy-btn {
+  flex: none;
+  min-width: 64px;
+  padding: 8px 12px;
+  background: #1b7a55;
+  color: #ffffff;
+  border: 0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.mac-copy-btn:hover {
+  background: #146b4a;
+}
+
+.mac-copy-btn:focus-visible {
+  outline: 2px solid rgba(27, 122, 85, 0.5);
+  outline-offset: 2px;
+}
+
+.mac-copy-btn.copied {
+  background: #2f6b4f;
+}
+
+.mac-fix-status {
+  min-height: 0;
+  margin: 0 !important;
+  color: #1b7a55 !important;
+  font-size: 0.74rem !important;
+  font-weight: 600;
+}
+
+.mac-fix-status:empty {
+  display: none;
+}
+
+.mac-launch-alt {
+  margin-top: 7px !important;
+  color: #6b655b !important;
+  font-size: 0.74rem !important;
+}
+
+.mac-launch-alt a {
+  color: #1b7a55;
+  font-weight: 600;
+  text-decoration: underline;
 }
 
 .download-dialog-foot {
@@ -6394,6 +6526,13 @@ body.lens-open {
   .download-tab {
     padding: 7px 4px;
     font-size: 0.72rem;
+  }
+  .mac-command {
+    flex-direction: column;
+  }
+  .mac-copy-btn {
+    width: 100%;
+    min-height: 42px;
   }
 }
 

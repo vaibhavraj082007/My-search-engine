@@ -257,4 +257,53 @@
       }
     });
   }
+
+  // One-time macOS Gatekeeper help: copy the quarantine-removal command.
+  var copyMacFixBtn = document.getElementById("copyMacFixBtn");
+  if (copyMacFixBtn) {
+    copyMacFixBtn.addEventListener("click", function () {
+      var command = document.getElementById("macFixCommand");
+      var status = document.getElementById("macFixStatus");
+      var text = command
+        ? command.textContent.trim()
+        : "xattr -dr com.apple.quarantine /Applications/8search.app";
+
+      function finish(ok) {
+        if (status) {
+          status.textContent = ok
+            ? "Command copied. Paste it into Terminal, then press Return."
+            : "Select the command above and copy it manually.";
+        }
+        copyMacFixBtn.textContent = ok ? "Copied" : "Copy";
+        copyMacFixBtn.classList.toggle("copied", ok);
+        window.setTimeout(function () {
+          copyMacFixBtn.textContent = "Copy";
+          copyMacFixBtn.classList.remove("copied");
+        }, 3000);
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () { finish(true); },
+          function () { finish(false); }
+        );
+        return;
+      }
+
+      try {
+        var area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        var copied = document.execCommand("copy");
+        area.remove();
+        finish(copied);
+      } catch (error) {
+        finish(false);
+      }
+    });
+  }
 })();
